@@ -1,0 +1,6 @@
+@PestiTrackBackend_HostAddress = http://localhost:5178
+
+GET {{PestiTrackBackend_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
