@@ -22,4 +22,8 @@ public sealed class Farm
 
     public ICollection<FarmRole> Roles { get; set; }
         = new List<FarmRole>();
+
+    public ICollection<Field> Fields { get; set; }
+        = new List<Field>();
+    
 }

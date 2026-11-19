@@ -20,6 +20,7 @@ public sealed class AppDbContext
     // Farm management
     public DbSet<Farm> Farms => Set<Farm>();
     public DbSet<FarmUser> FarmUsers => Set<FarmUser>();
+    public DbSet<Field> Fields => Set<Field>();
 
     // Farm-level authorization
     public DbSet<FarmRole> FarmRoles => Set<FarmRole>();
@@ -55,6 +56,7 @@ public sealed class AppDbContext
 
 
         ConfigureFarm(builder);
+        ConfigureField(builder);
         ConfigureFarmUser(builder);
         ConfigureFarmRole(builder);
         ConfigurePermission(builder);
@@ -234,4 +236,43 @@ public sealed class AppDbContext
                 .OnDelete(DeleteBehavior.Restrict);
         });
     }
+
+
+
+
+    private static void ConfigureField(ModelBuilder builder)
+    {
+        builder.Entity<Field>(entity =>
+        {
+            entity.ToTable("Fields");
+
+            entity.HasKey(f => f.Id);
+
+            entity.Property(f => f.Name)
+                .HasMaxLength(150)
+                .IsRequired();
+
+            entity.Property(f => f.Code)
+                .HasMaxLength(50)
+                .IsRequired();
+
+            entity.Property(f => f.AreaHectares)
+                .HasPrecision(18, 3);
+
+            entity.Property(f => f.Description)
+                .HasMaxLength(500);
+
+            // A field code must be unique within its farm.
+            entity.HasIndex(f => new { f.FarmId, f.Code })
+                .IsUnique();
+
+            entity.HasOne(f => f.Farm)
+                .WithMany(farm => farm.Fields)
+                .HasForeignKey(f => f.FarmId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+    }
+
+
+
 }

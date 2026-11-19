@@ -452,6 +452,47 @@ namespace PestiTrackBackend.Data.Migrations
                     b.ToTable("FarmUserRoles", (string)null);
                 });
 
+            modelBuilder.Entity("PestiTrackBackend.Models.Farms.Field", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<decimal?>("AreaHectares")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("decimal(18,3)");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<Guid>("FarmId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FarmId", "Code")
+                        .IsUnique();
+
+                    b.ToTable("Fields", (string)null);
+                });
+
             modelBuilder.Entity("PestiTrackBackend.Models.Identity.ApplicationRole", b =>
                 {
                     b.Property<Guid>("Id")
@@ -705,6 +746,17 @@ namespace PestiTrackBackend.Data.Migrations
                     b.Navigation("FarmUser");
                 });
 
+            modelBuilder.Entity("PestiTrackBackend.Models.Farms.Field", b =>
+                {
+                    b.HasOne("PestiTrackBackend.Models.Farms.Farm", "Farm")
+                        .WithMany("Fields")
+                        .HasForeignKey("FarmId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Farm");
+                });
+
             modelBuilder.Entity("PestiTrackBackend.Models.Authorization.FarmRole", b =>
                 {
                     b.Navigation("Permissions");
@@ -719,6 +771,8 @@ namespace PestiTrackBackend.Data.Migrations
 
             modelBuilder.Entity("PestiTrackBackend.Models.Farms.Farm", b =>
                 {
+                    b.Navigation("Fields");
+
                     b.Navigation("Roles");
 
                     b.Navigation("UserAssignments");
