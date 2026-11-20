@@ -5,6 +5,7 @@ using PestiTrackBackend.Models.Farms;
 using PestiTrackBackend.Models.Identity;
 using PestiTrackBackend.Security;
 using PestiTrackBackend.Models.Crops;
+using PestiTrackBackend.Models.Products;
 
 
 
@@ -33,6 +34,8 @@ public sealed class AppDbContext
     public DbSet<Crop> Crops => Set<Crop>();
 
     public DbSet<FieldCrop> FieldCrops => Set<FieldCrop>();
+
+    public DbSet<Product> Products => Set<Product>();
 
 
     protected override void OnModelCreating(ModelBuilder builder)
@@ -70,6 +73,7 @@ public sealed class AppDbContext
         ConfigurePermission(builder);
         ConfigureFarmUserRole(builder);
         ConfigureFarmRolePermission(builder);
+        ConfigureProduct(builder);
     }
 
     private static void ConfigureFarm(ModelBuilder builder)
@@ -360,5 +364,46 @@ private static void ConfigureFieldCrop(ModelBuilder builder)
             .OnDelete(DeleteBehavior.Restrict);
     });
 }
+
+
+private static void ConfigureProduct(ModelBuilder builder)
+{
+    builder.Entity<Product>(entity =>
+    {
+        entity.ToTable("Products");
+
+        entity.HasKey(product => product.Id);
+
+        entity.Property(product => product.Name)
+            .HasMaxLength(200)
+            .IsRequired();
+
+        entity.Property(product => product.ActiveIngredient)
+            .HasMaxLength(300);
+
+        entity.Property(product => product.Manufacturer)
+            .HasMaxLength(200);
+
+        entity.Property(product => product.RegistrationNumber)
+            .HasMaxLength(100);
+
+        entity.Property(product => product.Formulation)
+            .HasMaxLength(100);
+
+        entity.Property(product => product.Concentration)
+            .HasMaxLength(150);
+
+        entity.Property(product => product.HazardClass)
+            .HasMaxLength(100);
+
+        entity.Property(product => product.Description)
+            .HasMaxLength(1000);
+
+        entity.HasIndex(product => product.Name);
+
+        entity.HasIndex(product => product.RegistrationNumber);
+    });
+}
+
 
 }
