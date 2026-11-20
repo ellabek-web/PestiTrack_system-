@@ -174,7 +174,6 @@ public sealed class FarmRolesController : ControllerBase
         CancellationToken cancellationToken)
     {
         var role = await _db.FarmRoles
-            .Include(role => role.Permissions)
             .FirstOrDefaultAsync(
                 role =>
                     role.Id == roleId &&
@@ -245,20 +244,31 @@ public sealed class FarmRolesController : ControllerBase
             ? null
             : request.Description.Trim();
 
-        _db.FarmRolePermissions.RemoveRange(role.Permissions);
 
-        role.Permissions.Clear();
 
-        foreach (var permission in permissions)
+    // Load existing permission assignments for this role.
+    var existingPermissions = await _db.FarmRolePermissions
+        .Where(permission => permission.FarmRoleId == role.Id)
+        .ToListAsync(cancellationToken);
+
+    // Remove existing assignments.
+    _db.FarmRolePermissions.RemoveRange(existingPermissions);
+
+    // Add the requested permission assignments.
+    var newRolePermissions = permissions
+        .Select(permission => new FarmRolePermission
         {
-            role.Permissions.Add(new FarmRolePermission
-            {
-                FarmRoleId = role.Id,
-                PermissionId = permission.Id
-            });
-        }
+            FarmRoleId = role.Id,
+            PermissionId = permission.Id
+        })
+        .ToList();
 
-        await _db.SaveChangesAsync(cancellationToken);
+    _db.FarmRolePermissions.AddRange(newRolePermissions);
+
+
+    
+
+    await _db.SaveChangesAsync(cancellationToken);
 
         return Ok(new FarmRoleResponse
         {

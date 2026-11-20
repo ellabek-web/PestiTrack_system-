@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("PestiTrackBackend")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+39be0b1d777594d8f2247658118561e8c4b366a4")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+554925bece47f3ac63563fa20301b64b78d64a43")]
 [assembly: System.Reflection.AssemblyProductAttribute("PestiTrackBackend")]
 [assembly: System.Reflection.AssemblyTitleAttribute("PestiTrackBackend")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

@@ -4,6 +4,7 @@ using PestiTrackBackend.Models.Authorization;
 using PestiTrackBackend.Models.Farms;
 using PestiTrackBackend.Models.Identity;
 using PestiTrackBackend.Security;
+using PestiTrackBackend.Models.Crops;
 
 
 
@@ -28,6 +29,11 @@ public sealed class AppDbContext
     public DbSet<Permission> Permissions => Set<Permission>();
     public DbSet<FarmRolePermission> FarmRolePermissions
         => Set<FarmRolePermission>();
+        
+    public DbSet<Crop> Crops => Set<Crop>();
+
+    public DbSet<FieldCrop> FieldCrops => Set<FieldCrop>();
+
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -57,6 +63,8 @@ public sealed class AppDbContext
 
         ConfigureFarm(builder);
         ConfigureField(builder);
+        ConfigureCrop(builder);
+        ConfigureFieldCrop(builder);
         ConfigureFarmUser(builder);
         ConfigureFarmRole(builder);
         ConfigurePermission(builder);
@@ -248,6 +256,12 @@ public sealed class AppDbContext
 
             entity.HasKey(f => f.Id);
 
+            entity.HasAlternateKey(f => new
+            {
+                f.Id,
+                f.FarmId
+            });
+
             entity.Property(f => f.Name)
                 .HasMaxLength(150)
                 .IsRequired();
@@ -274,5 +288,77 @@ public sealed class AppDbContext
     }
 
 
+    private static void ConfigureCrop(ModelBuilder builder)
+{
+    builder.Entity<Crop>(entity =>
+    {
+        entity.ToTable("Crops");
+
+        entity.HasKey(c => c.Id);
+
+        entity.Property(c => c.Name)
+            .HasMaxLength(150)
+            .IsRequired();
+
+        entity.Property(c => c.ScientificName)
+            .HasMaxLength(200);
+
+        entity.Property(c => c.Description)
+            .HasMaxLength(500);
+
+        entity.HasIndex(c => c.Name)
+            .IsUnique();
+    });
+}
+
+private static void ConfigureFieldCrop(ModelBuilder builder)
+{
+    builder.Entity<FieldCrop>(entity =>
+    {
+        entity.ToTable("FieldCrops");
+
+        entity.HasKey(fc => fc.Id);
+
+        entity.Property(fc => fc.AreaHectares)
+            .HasPrecision(18, 3);
+
+        entity.Property(fc => fc.Status)
+            .HasConversion<string>()
+            .HasMaxLength(20)
+            .IsRequired();
+
+        entity.HasIndex(fc => new
+        {
+            fc.FarmId,
+            fc.FieldId,
+            fc.CropId,
+            fc.PlantingDate
+        });
+
+        entity.HasOne(fc => fc.Farm)
+            .WithMany(farm => farm.FieldCrops)
+            .HasForeignKey(fc => fc.FarmId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        entity.HasOne(fc => fc.Field)
+            .WithMany(field => field.CropAssignments)
+            .HasForeignKey(fc => new
+            {
+                fc.FieldId,
+                fc.FarmId
+            })
+            .HasPrincipalKey(field => new
+            {
+                field.Id,
+                field.FarmId
+            })
+            .OnDelete(DeleteBehavior.Restrict);
+
+        entity.HasOne(fc => fc.Crop)
+            .WithMany(crop => crop.FieldAssignments)
+            .HasForeignKey(fc => fc.CropId)
+            .OnDelete(DeleteBehavior.Restrict);
+    });
+}
 
 }

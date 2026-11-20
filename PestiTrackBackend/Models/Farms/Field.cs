@@ -1,3 +1,4 @@
+using PestiTrackBackend.Models.Crops;
 
 namespace PestiTrackBackend.Models.Farms;
 
@@ -18,4 +19,7 @@ public sealed class Field
     public bool IsActive { get; set; } = true;
 
     public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
+
+    public ICollection<FieldCrop> CropAssignments { get; set; }
+    = new List<FieldCrop>();
 }

@@ -360,6 +360,86 @@ namespace PestiTrackBackend.Data.Migrations
                         });
                 });
 
+            modelBuilder.Entity("PestiTrackBackend.Models.Crops.Crop", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.Property<string>("ScientificName")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Name")
+                        .IsUnique();
+
+                    b.ToTable("Crops", (string)null);
+                });
+
+            modelBuilder.Entity("PestiTrackBackend.Models.Crops.FieldCrop", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateOnly?>("ActualHarvestDate")
+                        .HasColumnType("date");
+
+                    b.Property<decimal?>("AreaHectares")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("decimal(18,3)");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid>("CropId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateOnly?>("ExpectedHarvestDate")
+                        .HasColumnType("date");
+
+                    b.Property<Guid>("FarmId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("FieldId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateOnly>("PlantingDate")
+                        .HasColumnType("date");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CropId");
+
+                    b.HasIndex("FieldId", "FarmId");
+
+                    b.HasIndex("FarmId", "FieldId", "CropId", "PlantingDate");
+
+                    b.ToTable("FieldCrops", (string)null);
+                });
+
             modelBuilder.Entity("PestiTrackBackend.Models.Farms.Farm", b =>
                 {
                     b.Property<Guid>("Id")
@@ -706,6 +786,34 @@ namespace PestiTrackBackend.Data.Migrations
                     b.Navigation("Permission");
                 });
 
+            modelBuilder.Entity("PestiTrackBackend.Models.Crops.FieldCrop", b =>
+                {
+                    b.HasOne("PestiTrackBackend.Models.Crops.Crop", "Crop")
+                        .WithMany("FieldAssignments")
+                        .HasForeignKey("CropId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("PestiTrackBackend.Models.Farms.Farm", "Farm")
+                        .WithMany("FieldCrops")
+                        .HasForeignKey("FarmId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("PestiTrackBackend.Models.Farms.Field", "Field")
+                        .WithMany("CropAssignments")
+                        .HasForeignKey("FieldId", "FarmId")
+                        .HasPrincipalKey("Id", "FarmId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Crop");
+
+                    b.Navigation("Farm");
+
+                    b.Navigation("Field");
+                });
+
             modelBuilder.Entity("PestiTrackBackend.Models.Farms.FarmUser", b =>
                 {
                     b.HasOne("PestiTrackBackend.Models.Farms.Farm", "Farm")
@@ -769,8 +877,15 @@ namespace PestiTrackBackend.Data.Migrations
                     b.Navigation("FarmRoles");
                 });
 
+            modelBuilder.Entity("PestiTrackBackend.Models.Crops.Crop", b =>
+                {
+                    b.Navigation("FieldAssignments");
+                });
+
             modelBuilder.Entity("PestiTrackBackend.Models.Farms.Farm", b =>
                 {
+                    b.Navigation("FieldCrops");
+
                     b.Navigation("Fields");
 
                     b.Navigation("Roles");
@@ -781,6 +896,11 @@ namespace PestiTrackBackend.Data.Migrations
             modelBuilder.Entity("PestiTrackBackend.Models.Farms.FarmUser", b =>
                 {
                     b.Navigation("Roles");
+                });
+
+            modelBuilder.Entity("PestiTrackBackend.Models.Farms.Field", b =>
+                {
+                    b.Navigation("CropAssignments");
                 });
 
             modelBuilder.Entity("PestiTrackBackend.Models.Identity.ApplicationUser", b =>

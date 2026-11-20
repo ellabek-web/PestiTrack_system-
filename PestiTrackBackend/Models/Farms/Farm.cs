@@ -1,6 +1,9 @@
 
 using PestiTrackBackend.Models.Authorization;
 using PestiTrackBackend.Models.Farms;
+using PestiTrackBackend.Models.Crops;
+
+
 namespace PestiTrackBackend.Models.Farms;
 
 public sealed class Farm
@@ -25,5 +28,8 @@ public sealed class Farm
 
     public ICollection<Field> Fields { get; set; }
         = new List<Field>();
+
+    public ICollection<FieldCrop> FieldCrops { get; set; }
+    = new List<FieldCrop>();
     
 }
