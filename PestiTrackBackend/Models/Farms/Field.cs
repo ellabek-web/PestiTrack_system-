@@ -1,4 +1,5 @@
 using PestiTrackBackend.Models.Crops;
+using PestiTrackBackend.Models.Weather;
 
 namespace PestiTrackBackend.Models.Farms;
 
@@ -21,5 +22,7 @@ public sealed class Field
     public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
 
     public ICollection<FieldCrop> CropAssignments { get; set; }
-    = new List<FieldCrop>();
+       = new List<FieldCrop>();
+    public ICollection<WeatherRecord> WeatherRecords { get; set; }
+      = new List<WeatherRecord>();
 }

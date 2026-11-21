@@ -6,6 +6,8 @@ using PestiTrackBackend.Models.Identity;
 using PestiTrackBackend.Security;
 using PestiTrackBackend.Models.Crops;
 using PestiTrackBackend.Models.Products;
+using PestiTrackBackend.Models.Workers;
+using PestiTrackBackend.Models.Weather;
 
 
 
@@ -36,6 +38,10 @@ public sealed class AppDbContext
     public DbSet<FieldCrop> FieldCrops => Set<FieldCrop>();
 
     public DbSet<Product> Products => Set<Product>();
+
+    public DbSet<Worker> Workers => Set<Worker>();
+
+    public DbSet<WeatherRecord> WeatherRecords => Set<WeatherRecord>();
 
 
     protected override void OnModelCreating(ModelBuilder builder)
@@ -74,6 +80,8 @@ public sealed class AppDbContext
         ConfigureFarmUserRole(builder);
         ConfigureFarmRolePermission(builder);
         ConfigureProduct(builder);
+        ConfigureWorker(builder);
+        ConfigureWeather(builder);
     }
 
     private static void ConfigureFarm(ModelBuilder builder)
@@ -292,118 +300,232 @@ public sealed class AppDbContext
     }
 
 
-    private static void ConfigureCrop(ModelBuilder builder)
-{
-    builder.Entity<Crop>(entity =>
+        private static void ConfigureCrop(ModelBuilder builder)
     {
-        entity.ToTable("Crops");
-
-        entity.HasKey(c => c.Id);
-
-        entity.Property(c => c.Name)
-            .HasMaxLength(150)
-            .IsRequired();
-
-        entity.Property(c => c.ScientificName)
-            .HasMaxLength(200);
-
-        entity.Property(c => c.Description)
-            .HasMaxLength(500);
-
-        entity.HasIndex(c => c.Name)
-            .IsUnique();
-    });
-}
-
-private static void ConfigureFieldCrop(ModelBuilder builder)
-{
-    builder.Entity<FieldCrop>(entity =>
-    {
-        entity.ToTable("FieldCrops");
-
-        entity.HasKey(fc => fc.Id);
-
-        entity.Property(fc => fc.AreaHectares)
-            .HasPrecision(18, 3);
-
-        entity.Property(fc => fc.Status)
-            .HasConversion<string>()
-            .HasMaxLength(20)
-            .IsRequired();
-
-        entity.HasIndex(fc => new
+        builder.Entity<Crop>(entity =>
         {
-            fc.FarmId,
-            fc.FieldId,
-            fc.CropId,
-            fc.PlantingDate
+            entity.ToTable("Crops");
+
+            entity.HasKey(c => c.Id);
+
+            entity.Property(c => c.Name)
+                .HasMaxLength(150)
+                .IsRequired();
+
+            entity.Property(c => c.ScientificName)
+                .HasMaxLength(200);
+
+            entity.Property(c => c.Description)
+                .HasMaxLength(500);
+
+            entity.HasIndex(c => c.Name)
+                .IsUnique();
         });
+    }
 
-        entity.HasOne(fc => fc.Farm)
-            .WithMany(farm => farm.FieldCrops)
-            .HasForeignKey(fc => fc.FarmId)
-            .OnDelete(DeleteBehavior.Restrict);
-
-        entity.HasOne(fc => fc.Field)
-            .WithMany(field => field.CropAssignments)
-            .HasForeignKey(fc => new
-            {
-                fc.FieldId,
-                fc.FarmId
-            })
-            .HasPrincipalKey(field => new
-            {
-                field.Id,
-                field.FarmId
-            })
-            .OnDelete(DeleteBehavior.Restrict);
-
-        entity.HasOne(fc => fc.Crop)
-            .WithMany(crop => crop.FieldAssignments)
-            .HasForeignKey(fc => fc.CropId)
-            .OnDelete(DeleteBehavior.Restrict);
-    });
-}
-
-
-private static void ConfigureProduct(ModelBuilder builder)
-{
-    builder.Entity<Product>(entity =>
+    private static void ConfigureFieldCrop(ModelBuilder builder)
     {
-        entity.ToTable("Products");
+        builder.Entity<FieldCrop>(entity =>
+        {
+            entity.ToTable("FieldCrops");
 
-        entity.HasKey(product => product.Id);
+            entity.HasKey(fc => fc.Id);
 
-        entity.Property(product => product.Name)
-            .HasMaxLength(200)
-            .IsRequired();
+            entity.Property(fc => fc.AreaHectares)
+                .HasPrecision(18, 3);
 
-        entity.Property(product => product.ActiveIngredient)
-            .HasMaxLength(300);
+            entity.Property(fc => fc.Status)
+                .HasConversion<string>()
+                .HasMaxLength(20)
+                .IsRequired();
 
-        entity.Property(product => product.Manufacturer)
-            .HasMaxLength(200);
+            entity.HasIndex(fc => new
+            {
+                fc.FarmId,
+                fc.FieldId,
+                fc.CropId,
+                fc.PlantingDate
+            });
 
-        entity.Property(product => product.RegistrationNumber)
-            .HasMaxLength(100);
+            entity.HasOne(fc => fc.Farm)
+                .WithMany(farm => farm.FieldCrops)
+                .HasForeignKey(fc => fc.FarmId)
+                .OnDelete(DeleteBehavior.Restrict);
 
-        entity.Property(product => product.Formulation)
-            .HasMaxLength(100);
+            entity.HasOne(fc => fc.Field)
+                .WithMany(field => field.CropAssignments)
+                .HasForeignKey(fc => new
+                {
+                    fc.FieldId,
+                    fc.FarmId
+                })
+                .HasPrincipalKey(field => new
+                {
+                    field.Id,
+                    field.FarmId
+                })
+                .OnDelete(DeleteBehavior.Restrict);
 
-        entity.Property(product => product.Concentration)
-            .HasMaxLength(150);
+            entity.HasOne(fc => fc.Crop)
+                .WithMany(crop => crop.FieldAssignments)
+                .HasForeignKey(fc => fc.CropId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+    }
 
-        entity.Property(product => product.HazardClass)
-            .HasMaxLength(100);
 
-        entity.Property(product => product.Description)
-            .HasMaxLength(1000);
+    private static void ConfigureProduct(ModelBuilder builder)
+    {
+        builder.Entity<Product>(entity =>
+        {
+            entity.ToTable("Products");
 
-        entity.HasIndex(product => product.Name);
+            entity.HasKey(product => product.Id);
 
-        entity.HasIndex(product => product.RegistrationNumber);
-    });
-}
+            entity.Property(product => product.Name)
+                .HasMaxLength(200)
+                .IsRequired();
+
+            entity.Property(product => product.ActiveIngredient)
+                .HasMaxLength(300);
+
+            entity.Property(product => product.Manufacturer)
+                .HasMaxLength(200);
+
+            entity.Property(product => product.RegistrationNumber)
+                .HasMaxLength(100);
+
+            entity.Property(product => product.Formulation)
+                .HasMaxLength(100);
+
+            entity.Property(product => product.Concentration)
+                .HasMaxLength(150);
+
+            entity.Property(product => product.HazardClass)
+                .HasMaxLength(100);
+
+            entity.Property(product => product.Description)
+                .HasMaxLength(1000);
+
+            entity.HasIndex(product => product.Name);
+
+            entity.HasIndex(product => product.RegistrationNumber);
+        });
+    }
+
+
+
+
+
+    private static void ConfigureWorker(ModelBuilder builder)
+    {
+        builder.Entity<Worker>(entity =>
+        {
+            entity.ToTable("Workers");
+
+            entity.HasKey(worker => worker.Id);
+
+            entity.Property(worker => worker.FullName)
+                .HasMaxLength(200)
+                .IsRequired();
+
+            entity.Property(worker => worker.WorkerCode)
+                .HasMaxLength(50)
+                .IsRequired();
+
+            entity.Property(worker => worker.PhoneNumber)
+                .HasMaxLength(30);
+
+            entity.Property(worker => worker.Email)
+                .HasMaxLength(256);
+
+            entity.Property(worker => worker.CertificationNumber)
+                .HasMaxLength(100);
+
+            // Worker codes must be unique within each farm.
+            entity.HasIndex(worker => new
+            {
+                worker.FarmId,
+                worker.WorkerCode
+            }).IsUnique();
+
+            entity.HasOne(worker => worker.Farm)
+                .WithMany(farm => farm.Workers)
+                .HasForeignKey(worker => worker.FarmId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+    }
+
+
+
+
+    private static void ConfigureWeather(ModelBuilder builder)
+    {
+        builder.Entity<WeatherRecord>(entity =>
+        {
+            entity.ToTable("WeatherRecords");
+
+            entity.HasKey(weather => weather.Id);
+
+            entity.Property(weather => weather.TemperatureCelsius)
+                .HasPrecision(6, 2);
+
+            entity.Property(weather => weather.HumidityPercentage)
+                .HasPrecision(5, 2);
+
+            entity.Property(weather => weather.RainfallMillimeters)
+                .HasPrecision(10, 2);
+
+            entity.Property(weather => weather.WindSpeedMetersPerSecond)
+                .HasPrecision(8, 2);
+
+            entity.Property(weather => weather.WindDirectionDegrees)
+                .HasPrecision(6, 2);
+
+            entity.Property(weather => weather.Conditions)
+                .HasMaxLength(100);
+
+            entity.Property(weather => weather.Source)
+                .HasMaxLength(100)
+                .IsRequired();
+
+            entity.Property(weather => weather.Notes)
+                .HasMaxLength(1000);
+
+            entity.HasIndex(weather => new
+            {
+                weather.FarmId,
+                weather.RecordedAtUtc
+            });
+
+            entity.HasIndex(weather => new
+            {
+                weather.FieldId,
+                weather.FarmId,
+                weather.RecordedAtUtc
+            });
+
+            entity.HasOne(weather => weather.Farm)
+                .WithMany(farm => farm.WeatherRecords)
+                .HasForeignKey(weather => weather.FarmId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(weather => weather.Field)
+                .WithMany(field => field.WeatherRecords)
+                .HasForeignKey(weather => new
+                {
+                    weather.FieldId,
+                    weather.FarmId
+                })
+                .HasPrincipalKey(field => new
+                {
+                    field.Id,
+                    field.FarmId
+                })
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+    }
+
 
 
 }

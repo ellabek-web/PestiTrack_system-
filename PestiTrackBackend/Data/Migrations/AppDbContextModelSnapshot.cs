@@ -759,6 +759,117 @@ namespace PestiTrackBackend.Data.Migrations
                     b.ToTable("Products", (string)null);
                 });
 
+            modelBuilder.Entity("PestiTrackBackend.Models.Weather.WeatherRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Conditions")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid>("FarmId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid?>("FieldId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<decimal?>("HumidityPercentage")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("decimal(5,2)");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<decimal?>("RainfallMillimeters")
+                        .HasPrecision(10, 2)
+                        .HasColumnType("decimal(10,2)");
+
+                    b.Property<DateTime>("RecordedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<decimal?>("TemperatureCelsius")
+                        .HasPrecision(6, 2)
+                        .HasColumnType("decimal(6,2)");
+
+                    b.Property<decimal?>("WindDirectionDegrees")
+                        .HasPrecision(6, 2)
+                        .HasColumnType("decimal(6,2)");
+
+                    b.Property<decimal?>("WindSpeedMetersPerSecond")
+                        .HasPrecision(8, 2)
+                        .HasColumnType("decimal(8,2)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FarmId", "RecordedAtUtc");
+
+                    b.HasIndex("FieldId", "FarmId", "RecordedAtUtc");
+
+                    b.ToTable("WeatherRecords", (string)null);
+                });
+
+            modelBuilder.Entity("PestiTrackBackend.Models.Workers.Worker", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime?>("CertificationExpiryDate")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("CertificationNumber")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Email")
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)");
+
+                    b.Property<Guid>("FarmId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("FullName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsApplicator")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("PhoneNumber")
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)");
+
+                    b.Property<string>("WorkerCode")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FarmId", "WorkerCode")
+                        .IsUnique();
+
+                    b.ToTable("Workers", (string)null);
+                });
+
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<System.Guid>", b =>
                 {
                     b.HasOne("PestiTrackBackend.Models.Identity.ApplicationRole", null)
@@ -919,6 +1030,36 @@ namespace PestiTrackBackend.Data.Migrations
                     b.Navigation("Farm");
                 });
 
+            modelBuilder.Entity("PestiTrackBackend.Models.Weather.WeatherRecord", b =>
+                {
+                    b.HasOne("PestiTrackBackend.Models.Farms.Farm", "Farm")
+                        .WithMany("WeatherRecords")
+                        .HasForeignKey("FarmId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("PestiTrackBackend.Models.Farms.Field", "Field")
+                        .WithMany("WeatherRecords")
+                        .HasForeignKey("FieldId", "FarmId")
+                        .HasPrincipalKey("Id", "FarmId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("Farm");
+
+                    b.Navigation("Field");
+                });
+
+            modelBuilder.Entity("PestiTrackBackend.Models.Workers.Worker", b =>
+                {
+                    b.HasOne("PestiTrackBackend.Models.Farms.Farm", "Farm")
+                        .WithMany("Workers")
+                        .HasForeignKey("FarmId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Farm");
+                });
+
             modelBuilder.Entity("PestiTrackBackend.Models.Authorization.FarmRole", b =>
                 {
                     b.Navigation("Permissions");
@@ -945,6 +1086,10 @@ namespace PestiTrackBackend.Data.Migrations
                     b.Navigation("Roles");
 
                     b.Navigation("UserAssignments");
+
+                    b.Navigation("WeatherRecords");
+
+                    b.Navigation("Workers");
                 });
 
             modelBuilder.Entity("PestiTrackBackend.Models.Farms.FarmUser", b =>
@@ -955,6 +1100,8 @@ namespace PestiTrackBackend.Data.Migrations
             modelBuilder.Entity("PestiTrackBackend.Models.Farms.Field", b =>
                 {
                     b.Navigation("CropAssignments");
+
+                    b.Navigation("WeatherRecords");
                 });
 
             modelBuilder.Entity("PestiTrackBackend.Models.Identity.ApplicationUser", b =>

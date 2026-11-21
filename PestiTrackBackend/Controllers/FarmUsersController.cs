@@ -215,91 +215,103 @@ public sealed class FarmUsersController : ControllerBase
         return Ok(response);
     }
 
-    // PUT: api/farms/{farmId}/users/{farmUserId}/roles
-    [HttpPut("{farmUserId:guid}/roles")]
-    public async Task<ActionResult<FarmUserResponse>> UpdateRoles(
-        Guid farmId,
-        Guid farmUserId,
-        UpdateFarmUserRolesRequest request,
-        CancellationToken cancellationToken)
+
+
+// PUT: api/farms/{farmId}/users/{farmUserId}/roles
+[HttpPut("{farmUserId:guid}/roles")]
+public async Task<ActionResult<FarmUserResponse>> UpdateRoles(
+    Guid farmId,
+    Guid farmUserId,
+    UpdateFarmUserRolesRequest request,
+    CancellationToken cancellationToken)
+{
+    var assignment = await _db.FarmUsers
+        .Include(item => item.User)
+        .FirstOrDefaultAsync(
+            item =>
+                item.Id == farmUserId &&
+                item.FarmId == farmId,
+            cancellationToken);
+
+    if (assignment is null)
     {
-        var assignment = await _db.FarmUsers
-            .Include(item => item.User)
-            .Include(item => item.Roles)
-            .FirstOrDefaultAsync(
-                item =>
-                    item.Id == farmUserId &&
-                    item.FarmId == farmId,
-                cancellationToken);
-
-        if (assignment is null)
+        return NotFound(new
         {
-            return NotFound(new
-            {
-                message = "Farm user assignment not found."
-            });
-        }
-
-        var roleIds = request.FarmRoleIds
-            .Distinct()
-            .ToList();
-
-        if (roleIds.Count == 0 ||
-            roleIds.Count != request.FarmRoleIds.Count ||
-            roleIds.Any(id => id == Guid.Empty))
-        {
-            return BadRequest(new
-            {
-                message = "Provide valid, unique farm role IDs."
-            });
-        }
-
-        var roles = await _db.FarmRoles
-            .Where(role =>
-                role.FarmId == farmId &&
-                roleIds.Contains(role.Id) &&
-                !role.IsSystemRole)
-            .ToListAsync(cancellationToken);
-
-        if (roles.Count != roleIds.Count)
-        {
-            return BadRequest(new
-            {
-                message = "One or more roles are invalid or do not belong to this farm."
-            });
-        }
-
-        _db.FarmUserRoles.RemoveRange(assignment.Roles);
-        assignment.Roles.Clear();
-
-        foreach (var role in roles)
-        {
-            assignment.Roles.Add(new FarmUserRole
-            {
-                FarmId = farmId,
-                FarmUserId = assignment.Id,
-                FarmRoleId = role.Id
-            });
-        }
-
-        await _db.SaveChangesAsync(cancellationToken);
-
-        return Ok(new FarmUserResponse
-        {
-            Id = assignment.Id,
-            FarmId = assignment.FarmId,
-            UserId = assignment.UserId,
-            DisplayName = assignment.User.DisplayName,
-            Email = assignment.User.Email,
-            IsActive = assignment.IsActive,
-            AssignedAtUtc = assignment.AssignedAtUtc,
-            Roles = roles.Select(role => new FarmUserRoleResponse
-            {
-                Id = role.Id,
-                Name = role.Name
-            }).ToList()
+            message = "Farm user assignment not found."
         });
     }
+
+    var roleIds = request.FarmRoleIds
+        .Distinct()
+        .ToList();
+
+    if (roleIds.Count == 0 ||
+        roleIds.Count != request.FarmRoleIds.Count ||
+        roleIds.Any(id => id == Guid.Empty))
+    {
+        return BadRequest(new
+        {
+            message = "Provide valid, unique farm role IDs."
+        });
+    }
+
+    var roles = await _db.FarmRoles
+        .Where(role =>
+            role.FarmId == farmId &&
+            roleIds.Contains(role.Id) &&
+            !role.IsSystemRole)
+        .ToListAsync(cancellationToken);
+
+    if (roles.Count != roleIds.Count)
+    {
+        return BadRequest(new
+        {
+            message = "One or more roles are invalid or do not belong to this farm."
+        });
+    }
+
+    // Load existing role assignments directly from the join table.
+    var existingAssignments = await _db.FarmUserRoles
+        .Where(item =>
+            item.FarmUserId == assignment.Id &&
+            item.FarmId == farmId)
+        .ToListAsync(cancellationToken);
+
+    // Remove existing assignments without modifying the navigation collection.
+    _db.FarmUserRoles.RemoveRange(existingAssignments);
+
+    // Add the replacement assignments directly to the DbSet.
+    var newAssignments = roles.Select(role => new FarmUserRole
+    {
+        FarmId = farmId,
+        FarmUserId = assignment.Id,
+        FarmRoleId = role.Id
+    }).ToList();
+
+    await _db.FarmUserRoles.AddRangeAsync(
+        newAssignments,
+        cancellationToken);
+
+    await _db.SaveChangesAsync(cancellationToken);
+
+    return Ok(new FarmUserResponse
+    {
+        Id = assignment.Id,
+        FarmId = assignment.FarmId,
+        UserId = assignment.UserId,
+        DisplayName = assignment.User.DisplayName,
+        Email = assignment.User.Email,
+        IsActive = assignment.IsActive,
+        AssignedAtUtc = assignment.AssignedAtUtc,
+        Roles = roles.Select(role => new FarmUserRoleResponse
+        {
+            Id = role.Id,
+            Name = role.Name
+        }).ToList()
+    });
+}
+
+
 
     // PATCH: api/farms/{farmId}/users/{farmUserId}/status
     [HttpPatch("{farmUserId:guid}/status")]

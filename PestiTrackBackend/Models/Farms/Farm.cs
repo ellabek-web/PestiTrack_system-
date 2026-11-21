@@ -1,8 +1,8 @@
 
 using PestiTrackBackend.Models.Authorization;
-using PestiTrackBackend.Models.Farms;
 using PestiTrackBackend.Models.Crops;
-
+using PestiTrackBackend.Models.Workers;
+using PestiTrackBackend.Models.Weather;
 
 namespace PestiTrackBackend.Models.Farms;
 
@@ -30,6 +30,11 @@ public sealed class Farm
         = new List<Field>();
 
     public ICollection<FieldCrop> FieldCrops { get; set; }
-    = new List<FieldCrop>();
-    
+        = new List<FieldCrop>();
+
+    public ICollection<Worker> Workers { get; set; }
+        = new List<Worker>();
+
+    public ICollection<WeatherRecord> WeatherRecords { get; set; }
+        = new List<WeatherRecord>();
 }
