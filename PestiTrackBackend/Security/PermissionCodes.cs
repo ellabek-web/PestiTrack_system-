@@ -23,9 +23,10 @@ public static class PermissionCodes
     public const string ApplicationsCreate = "applications.create";
     public const string ApplicationsApprove = "applications.approve";
 
-    // Inventory
+   // Inventory
     public const string InventoryView = "inventory.view";
     public const string InventoryManage = "inventory.manage";
+    public const string InventoryIssue = "inventory.issue";
 
     // Workers
     public const string WorkersView = "workers.view";

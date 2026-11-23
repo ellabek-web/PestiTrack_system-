@@ -37,6 +37,13 @@ public static class PermissionSeedData
         new() { Id = Guid.Parse("10000000-0000-0000-0000-000000000020"), Code = PermissionCodes.FarmUsersView, Name = "View farm users", Description = "View users assigned to a farm." },
         new() { Id = Guid.Parse("10000000-0000-0000-0000-000000000021"), Code = PermissionCodes.FarmUsersManage, Name = "Manage farm users", Description = "Manage farm user assignments and farm roles." },
 
-        new() { Id = Guid.Parse("10000000-0000-0000-0000-000000000022"), Code = PermissionCodes.AuditView, Name = "View audit trail", Description = "View farm audit records." }
+        new() { Id = Guid.Parse("10000000-0000-0000-0000-000000000022"), Code = PermissionCodes.AuditView, Name = "View audit trail", Description = "View farm audit records." },
+        new()
+        {
+            Id = Guid.Parse("10000000-0000-0000-0000-000000000023"),
+            Code = PermissionCodes.InventoryIssue,
+            Name = "Issue inventory",
+            Description = "Issue pesticide products from farm inventory."
+        }
     ];
 }

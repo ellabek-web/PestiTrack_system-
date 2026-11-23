@@ -8,6 +8,8 @@ using PestiTrackBackend.Models.Crops;
 using PestiTrackBackend.Models.Products;
 using PestiTrackBackend.Models.Workers;
 using PestiTrackBackend.Models.Weather;
+using PestiTrackBackend.Models.Inventory;
+
 
 
 
@@ -42,6 +44,9 @@ public sealed class AppDbContext
     public DbSet<Worker> Workers => Set<Worker>();
 
     public DbSet<WeatherRecord> WeatherRecords => Set<WeatherRecord>();
+
+    public DbSet<InventoryTransaction> InventoryTransactions
+        => Set<InventoryTransaction>();
 
 
     protected override void OnModelCreating(ModelBuilder builder)
@@ -82,6 +87,7 @@ public sealed class AppDbContext
         ConfigureProduct(builder);
         ConfigureWorker(builder);
         ConfigureWeather(builder);
+        ConfigureInventory(builder);
     }
 
     private static void ConfigureFarm(ModelBuilder builder)
@@ -526,6 +532,65 @@ public sealed class AppDbContext
         });
     }
 
+    private static void ConfigureInventory(ModelBuilder builder)
+    {
+        builder.Entity<InventoryTransaction>(entity =>
+        {
+            entity.ToTable("InventoryTransactions");
+
+            entity.HasKey(transaction => transaction.Id);
+
+            entity.Property(transaction => transaction.TransactionType)
+                .HasConversion<string>()
+                .HasMaxLength(30)
+                .IsRequired();
+
+            entity.Property(transaction => transaction.Quantity)
+                .HasPrecision(18, 3)
+                .IsRequired();
+
+            entity.Property(transaction => transaction.BatchNumber)
+                .HasMaxLength(100);
+
+            entity.Property(transaction => transaction.Reference)
+                .HasMaxLength(100);
+
+            entity.Property(transaction => transaction.Reason)
+               .HasMaxLength(500);    
+
+            entity.Property(transaction => transaction.Notes)
+                .HasMaxLength(1000);
+
+            entity.HasIndex(transaction => new
+            {
+                transaction.FarmId,
+                transaction.ProductId,
+                transaction.CreatedAtUtc
+            });
+
+            entity.HasIndex(transaction => new
+            {
+                transaction.FarmId,
+                transaction.ProductId,
+                transaction.BatchNumber
+            });
+
+            entity.HasOne(transaction => transaction.Farm)
+                .WithMany()
+                .HasForeignKey(transaction => transaction.FarmId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(transaction => transaction.Product)
+                .WithMany()
+                .HasForeignKey(transaction => transaction.ProductId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne<ApplicationUser>()
+                .WithMany()
+                .HasForeignKey(transaction => transaction.CreatedByUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+    }
 
 
 }
