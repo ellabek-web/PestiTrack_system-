@@ -125,6 +125,121 @@ namespace PestiTrackBackend.Data.Migrations
                     b.ToTable("AspNetUserTokens", (string)null);
                 });
 
+            modelBuilder.Entity("PestiTrackBackend.Models.Applications.PesticideApplication", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("ApplicationDateUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("ApplicationMethod")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<decimal>("AreaTreatedHectares")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("decimal(18,3)");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid>("CreatedByUserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Equipment")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<Guid>("FarmId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("FieldCropId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("FieldId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)");
+
+                    b.Property<string>("TargetPest")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<Guid?>("WeatherRecordId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("WorkerId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedByUserId");
+
+                    b.HasIndex("FieldCropId");
+
+                    b.HasIndex("FieldId");
+
+                    b.HasIndex("WeatherRecordId");
+
+                    b.HasIndex("WorkerId");
+
+                    b.HasIndex("FarmId", "ApplicationDateUtc");
+
+                    b.HasIndex("FarmId", "FieldId");
+
+                    b.ToTable("PesticideApplications", (string)null);
+                });
+
+            modelBuilder.Entity("PestiTrackBackend.Models.Applications.PesticideApplicationProduct", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<decimal>("ApplicationRate")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("decimal(18,3)");
+
+                    b.Property<string>("BatchNumber")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<Guid>("PesticideApplicationId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("ProductId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<decimal>("QuantityUsed")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("decimal(18,3)");
+
+                    b.Property<string>("RateUnit")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PesticideApplicationId");
+
+                    b.HasIndex("ProductId");
+
+                    b.ToTable("PesticideApplicationProducts", (string)null);
+                });
+
             modelBuilder.Entity("PestiTrackBackend.Models.Authorization.FarmRole", b =>
                 {
                     b.Property<Guid>("Id")
@@ -738,6 +853,9 @@ namespace PestiTrackBackend.Data.Migrations
                         .HasMaxLength(1000)
                         .HasColumnType("nvarchar(1000)");
 
+                    b.Property<Guid?>("PesticideApplicationProductId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<Guid>("ProductId")
                         .HasColumnType("uniqueidentifier");
 
@@ -762,11 +880,20 @@ namespace PestiTrackBackend.Data.Migrations
 
                     b.HasIndex("CreatedByUserId");
 
+                    b.HasIndex("PesticideApplicationProductId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_InventoryTransactions_ApplicationProductId")
+                        .HasFilter("[PesticideApplicationProductId] IS NOT NULL");
+
                     b.HasIndex("ProductId");
 
                     b.HasIndex("FarmId", "ProductId", "BatchNumber");
 
                     b.HasIndex("FarmId", "ProductId", "CreatedAtUtc");
+
+                    b.HasIndex("FarmId", "ProductId", "BatchNumber", "TransactionType", "Reference")
+                        .HasDatabaseName("IX_InventoryTransactions_ReferenceCheck")
+                        .HasFilter("[Reference] IS NOT NULL");
 
                     b.ToTable("InventoryTransactions", (string)null);
                 });
@@ -987,6 +1114,75 @@ namespace PestiTrackBackend.Data.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("PestiTrackBackend.Models.Applications.PesticideApplication", b =>
+                {
+                    b.HasOne("PestiTrackBackend.Models.Identity.ApplicationUser", "CreatedByUser")
+                        .WithMany()
+                        .HasForeignKey("CreatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("PestiTrackBackend.Models.Farms.Farm", "Farm")
+                        .WithMany()
+                        .HasForeignKey("FarmId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("PestiTrackBackend.Models.Crops.FieldCrop", "FieldCrop")
+                        .WithMany()
+                        .HasForeignKey("FieldCropId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("PestiTrackBackend.Models.Farms.Field", "Field")
+                        .WithMany()
+                        .HasForeignKey("FieldId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("PestiTrackBackend.Models.Weather.WeatherRecord", "WeatherRecord")
+                        .WithMany()
+                        .HasForeignKey("WeatherRecordId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("PestiTrackBackend.Models.Workers.Worker", "Worker")
+                        .WithMany()
+                        .HasForeignKey("WorkerId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("CreatedByUser");
+
+                    b.Navigation("Farm");
+
+                    b.Navigation("Field");
+
+                    b.Navigation("FieldCrop");
+
+                    b.Navigation("WeatherRecord");
+
+                    b.Navigation("Worker");
+                });
+
+            modelBuilder.Entity("PestiTrackBackend.Models.Applications.PesticideApplicationProduct", b =>
+                {
+                    b.HasOne("PestiTrackBackend.Models.Applications.PesticideApplication", "PesticideApplication")
+                        .WithMany("Products")
+                        .HasForeignKey("PesticideApplicationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("PestiTrackBackend.Models.Products.Product", "Product")
+                        .WithMany()
+                        .HasForeignKey("ProductId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("PesticideApplication");
+
+                    b.Navigation("Product");
+                });
+
             modelBuilder.Entity("PestiTrackBackend.Models.Authorization.FarmRole", b =>
                 {
                     b.HasOne("PestiTrackBackend.Models.Farms.Farm", "Farm")
@@ -1110,11 +1306,18 @@ namespace PestiTrackBackend.Data.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.HasOne("PestiTrackBackend.Models.Applications.PesticideApplicationProduct", "ApplicationProduct")
+                        .WithOne("InventoryTransaction")
+                        .HasForeignKey("PestiTrackBackend.Models.Inventory.InventoryTransaction", "PesticideApplicationProductId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("PestiTrackBackend.Models.Products.Product", "Product")
                         .WithMany()
                         .HasForeignKey("ProductId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.Navigation("ApplicationProduct");
 
                     b.Navigation("Farm");
 
@@ -1149,6 +1352,16 @@ namespace PestiTrackBackend.Data.Migrations
                         .IsRequired();
 
                     b.Navigation("Farm");
+                });
+
+            modelBuilder.Entity("PestiTrackBackend.Models.Applications.PesticideApplication", b =>
+                {
+                    b.Navigation("Products");
+                });
+
+            modelBuilder.Entity("PestiTrackBackend.Models.Applications.PesticideApplicationProduct", b =>
+                {
+                    b.Navigation("InventoryTransaction");
                 });
 
             modelBuilder.Entity("PestiTrackBackend.Models.Authorization.FarmRole", b =>

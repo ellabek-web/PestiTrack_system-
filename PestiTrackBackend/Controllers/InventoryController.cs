@@ -202,6 +202,22 @@ public sealed class InventoryController : ControllerBase
         var existing = await GetBatchTransactions(
             farmId, request.ProductId, batchNumber, cancellationToken);
 
+        var reference = Normalize(request.Reference);
+
+        if (await ReferenceExistsAsync(
+            farmId,
+            request.ProductId,
+            batchNumber,
+            InventoryTransactionType.StockIn,
+            reference,
+            cancellationToken))
+        {
+            return Conflict(new
+            {
+                message = "A transaction with this reference already exists for this product, batch, and transaction type."
+            });
+        }
+
         if (!HasConsistentExpiry(existing, request.ExpiryDate))
         {
             return Conflict(new
@@ -218,7 +234,7 @@ public sealed class InventoryController : ControllerBase
             Quantity = request.Quantity,
             BatchNumber = batchNumber,
             ExpiryDate = request.ExpiryDate,
-            Reference = Normalize(request.Reference),
+            Reference = reference,
             Notes = Normalize(request.Notes),
             CreatedByUserId = userId.Value,
             CreatedAtUtc = DateTime.UtcNow
@@ -276,6 +292,22 @@ public sealed class InventoryController : ControllerBase
         var existing = await GetBatchTransactions(
             farmId, request.ProductId, batchNumber, cancellationToken);
 
+        var reference = Normalize(request.Reference);
+
+        if (await ReferenceExistsAsync(
+            farmId,
+            request.ProductId,
+            batchNumber,
+            InventoryTransactionType.StockOut,
+            reference,
+            cancellationToken))
+        {
+            return Conflict(new
+            {
+                message = "A transaction with this reference already exists for this product, batch, and transaction type."
+            });
+        }
+
         var availableQuantity = existing.Sum(t =>
             t.TransactionType == InventoryTransactionType.StockIn ||
             t.TransactionType == InventoryTransactionType.AdjustmentIn
@@ -305,7 +337,7 @@ public sealed class InventoryController : ControllerBase
             Quantity = request.Quantity,
             BatchNumber = batchNumber,
             ExpiryDate = expiryDate,
-            Reference = Normalize(request.Reference),
+            Reference = reference,
             Notes = Normalize(request.Notes),
             CreatedByUserId = userId.Value,
             CreatedAtUtc = DateTime.UtcNow
@@ -365,6 +397,27 @@ public sealed class InventoryController : ControllerBase
         var existing = await GetBatchTransactions(
             farmId, request.ProductId, batchNumber, cancellationToken);
 
+        var transactionType =
+            request.Direction == InventoryAdjustmentDirection.Increase
+                ? InventoryTransactionType.AdjustmentIn
+                : InventoryTransactionType.AdjustmentOut;
+
+        var reference = Normalize(request.Reference);
+
+        if (await ReferenceExistsAsync(
+            farmId,
+            request.ProductId,
+            batchNumber,
+            transactionType,
+            reference,
+            cancellationToken))
+        {
+            return Conflict(new
+            {
+                message = "A transaction with this reference already exists for this product, batch, and transaction type."
+            });
+        }
+
         var batchExpiry = existing.Count == 0
             ? request.ExpiryDate
             : existing.Select(t => t.ExpiryDate).Distinct().SingleOrDefault();
@@ -383,11 +436,6 @@ public sealed class InventoryController : ControllerBase
             t.TransactionType == InventoryTransactionType.AdjustmentIn
                 ? t.Quantity
                 : -t.Quantity);
-
-        var transactionType =
-            request.Direction == InventoryAdjustmentDirection.Increase
-                ? InventoryTransactionType.AdjustmentIn
-                : InventoryTransactionType.AdjustmentOut;
 
         if (transactionType == InventoryTransactionType.AdjustmentOut &&
             request.Quantity > currentQuantity)
@@ -409,7 +457,7 @@ public sealed class InventoryController : ControllerBase
             BatchNumber = batchNumber,
             ExpiryDate = batchExpiry,
             Reason = reason,
-            Reference = Normalize(request.Reference),
+            Reference = reference,
             Notes = Normalize(request.Notes),
             CreatedByUserId = userId.Value,
             CreatedAtUtc = DateTime.UtcNow
@@ -438,6 +486,31 @@ public sealed class InventoryController : ControllerBase
                 t.BatchNumber == batchNumber)
             .ToListAsync(cancellationToken);
     }
+
+    private async Task<bool> ReferenceExistsAsync(
+        Guid farmId,
+        Guid productId,
+        string batchNumber,
+        InventoryTransactionType transactionType,
+        string? reference,
+        CancellationToken cancellationToken)
+    {
+        if (reference is null)
+            return false;
+
+        return await _db.InventoryTransactions.AnyAsync(t =>
+            t.FarmId == farmId &&
+            t.ProductId == productId &&
+            t.BatchNumber == batchNumber &&
+            t.TransactionType == transactionType &&
+            t.Reference == reference,
+            cancellationToken);
+    }
+
+
+
+
+
 
     private static bool HasConsistentExpiry(
         List<InventoryTransaction> existing,

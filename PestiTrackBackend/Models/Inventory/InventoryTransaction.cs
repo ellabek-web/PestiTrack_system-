@@ -1,5 +1,6 @@
 using PestiTrackBackend.Models.Farms;
 using PestiTrackBackend.Models.Products;
+using PestiTrackBackend.Models.Applications;
 
 namespace PestiTrackBackend.Models.Inventory;
 
@@ -32,4 +33,8 @@ public sealed class InventoryTransaction
     public Farm Farm { get; set; } = null!;
 
     public Product Product { get; set; } = null!;
+
+    public Guid? PesticideApplicationProductId { get; set; }
+
+    public PesticideApplicationProduct? ApplicationProduct { get; set; }
 }

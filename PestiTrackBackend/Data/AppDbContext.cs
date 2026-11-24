@@ -9,7 +9,7 @@ using PestiTrackBackend.Models.Products;
 using PestiTrackBackend.Models.Workers;
 using PestiTrackBackend.Models.Weather;
 using PestiTrackBackend.Models.Inventory;
-
+using PestiTrackBackend.Models.Applications;
 
 
 
@@ -47,6 +47,12 @@ public sealed class AppDbContext
 
     public DbSet<InventoryTransaction> InventoryTransactions
         => Set<InventoryTransaction>();
+
+    public DbSet<PesticideApplication> PesticideApplications
+        => Set<PesticideApplication>();
+
+    public DbSet<PesticideApplicationProduct> PesticideApplicationProducts
+        => Set<PesticideApplicationProduct>();
 
 
     protected override void OnModelCreating(ModelBuilder builder)
@@ -88,6 +94,7 @@ public sealed class AppDbContext
         ConfigureWorker(builder);
         ConfigureWeather(builder);
         ConfigureInventory(builder);
+        ConfigureApplications(builder);
     }
 
     private static void ConfigureFarm(ModelBuilder builder)
@@ -575,6 +582,20 @@ public sealed class AppDbContext
                 transaction.BatchNumber
             });
 
+            // Supports duplicate-reference checks within a farm,
+            // product, batch, and transaction type.
+            entity.HasIndex(transaction => new
+            {
+                transaction.FarmId,
+                transaction.ProductId,
+                transaction.BatchNumber,
+                transaction.TransactionType,
+                transaction.Reference
+            })
+            .HasDatabaseName("IX_InventoryTransactions_ReferenceCheck")
+            .HasFilter("[Reference] IS NOT NULL");
+
+
             entity.HasOne(transaction => transaction.Farm)
                 .WithMany()
                 .HasForeignKey(transaction => transaction.FarmId)
@@ -588,6 +609,136 @@ public sealed class AppDbContext
             entity.HasOne<ApplicationUser>()
                 .WithMany()
                 .HasForeignKey(transaction => transaction.CreatedByUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+
+
+            entity.HasOne(transaction => transaction.ApplicationProduct)
+                .WithOne(productLine => productLine.InventoryTransaction)
+                .HasForeignKey<InventoryTransaction>(
+                    transaction => transaction.PesticideApplicationProductId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(transaction =>
+                    transaction.PesticideApplicationProductId)
+                .IsUnique()
+                .HasFilter("[PesticideApplicationProductId] IS NOT NULL")
+                .HasDatabaseName(
+                    "IX_InventoryTransactions_ApplicationProductId");
+        });
+    }
+
+
+    private static void ConfigureApplications(ModelBuilder builder)
+{
+    builder.Entity<PesticideApplication>(entity =>
+    {
+        entity.ToTable("PesticideApplications");
+
+        entity.HasKey(application => application.Id);
+
+        entity.Property(application => application.TargetPest)
+            .HasMaxLength(200)
+            .IsRequired();
+
+        entity.Property(application => application.ApplicationMethod)
+            .HasMaxLength(100)
+            .IsRequired();
+
+        entity.Property(application => application.Equipment)
+            .HasMaxLength(200);
+
+        entity.Property(application => application.AreaTreatedHectares)
+            .HasPrecision(18, 3)
+            .IsRequired();
+
+        entity.Property(application => application.Status)
+            .HasConversion<string>()
+            .HasMaxLength(30)
+            .IsRequired();
+
+        entity.Property(application => application.Notes)
+            .HasMaxLength(1000);
+
+        entity.HasIndex(application => new
+        {
+            application.FarmId,
+            application.ApplicationDateUtc
+        });
+
+        entity.HasIndex(application => new
+        {
+            application.FarmId,
+            application.FieldId
+        });
+
+        entity.HasOne(application => application.Farm)
+            .WithMany()
+            .HasForeignKey(application => application.FarmId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        entity.HasOne(application => application.Field)
+            .WithMany()
+            .HasForeignKey(application => application.FieldId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        entity.HasOne(application => application.FieldCrop)
+            .WithMany()
+            .HasForeignKey(application => application.FieldCropId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        entity.HasOne(application => application.Worker)
+            .WithMany()
+            .HasForeignKey(application => application.WorkerId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        entity.HasOne(application => application.WeatherRecord)
+            .WithMany()
+            .HasForeignKey(application => application.WeatherRecordId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        entity.HasOne(application => application.CreatedByUser)
+            .WithMany()
+            .HasForeignKey(application => application.CreatedByUserId)
+            .OnDelete(DeleteBehavior.Restrict);
+    });
+
+    builder.Entity<PesticideApplicationProduct>(entity =>
+    {
+            entity.ToTable("PesticideApplicationProducts");
+
+            entity.HasKey(productLine => productLine.Id);
+
+            entity.Property(productLine => productLine.BatchNumber)
+                .HasMaxLength(100)
+                .IsRequired();
+
+            entity.Property(productLine => productLine.QuantityUsed)
+                .HasPrecision(18, 3)
+                .IsRequired();
+
+            entity.Property(productLine => productLine.ApplicationRate)
+                .HasPrecision(18, 3)
+                .IsRequired();
+
+            entity.Property(productLine => productLine.RateUnit)
+                .HasMaxLength(50)
+                .IsRequired();
+
+            entity.HasIndex(productLine =>
+                productLine.PesticideApplicationId);
+
+            entity.HasIndex(productLine =>
+                productLine.ProductId);
+
+            entity.HasOne(productLine => productLine.PesticideApplication)
+                .WithMany(application => application.Products)
+                .HasForeignKey(productLine => productLine.PesticideApplicationId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(productLine => productLine.Product)
+                .WithMany()
+                .HasForeignKey(productLine => productLine.ProductId)
                 .OnDelete(DeleteBehavior.Restrict);
         });
     }
