@@ -55,6 +55,153 @@ public sealed class PesticideApplicationsController : ControllerBase
         return Ok(response);
     }
 
+    // GET: api/farms/{farmId}/applications/history
+    [HttpGet("history")]
+    [FarmPermission("applications.view")]
+    public async Task<IActionResult> GetHistory(
+        Guid farmId,
+        [FromQuery] PesticideApplicationHistoryQueryRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (request.FromUtc.HasValue &&
+            request.ToUtc.HasValue &&
+            request.FromUtc.Value > request.ToUtc.Value)
+        {
+            return BadRequest(new
+            {
+                message = "FromUtc must be earlier than or equal to ToUtc."
+            });
+        }
+
+        var query = _db.PesticideApplications
+            .AsNoTracking()
+            .Where(application => application.FarmId == farmId);
+
+        if (request.FieldId.HasValue)
+        {
+            query = query.Where(application =>
+                application.FieldId == request.FieldId.Value);
+        }
+
+        if (request.FieldCropId.HasValue)
+        {
+            query = query.Where(application =>
+                application.FieldCropId == request.FieldCropId.Value);
+        }
+
+        if (request.WorkerId.HasValue)
+        {
+            query = query.Where(application =>
+                application.WorkerId == request.WorkerId.Value);
+        }
+
+        if (request.ProductId.HasValue)
+        {
+            query = query.Where(application =>
+                application.Products.Any(product =>
+                    product.ProductId == request.ProductId.Value));
+        }
+
+        if (request.Status.HasValue)
+        {
+            query = query.Where(application =>
+                application.Status == request.Status.Value);
+        }
+
+        if (request.FromUtc.HasValue)
+        {
+            var fromUtc = request.FromUtc.Value.UtcDateTime;
+            query = query.Where(application =>
+                application.ApplicationDateUtc >= fromUtc);
+        }
+
+        if (request.ToUtc.HasValue)
+        {
+            var toUtc = request.ToUtc.Value.UtcDateTime;
+            query = query.Where(application =>
+                application.ApplicationDateUtc <= toUtc);
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.Search))
+        {
+            var search = request.Search.Trim();
+
+            query = query.Where(application =>
+                application.TargetPest.Contains(search) ||
+                application.ApplicationMethod.Contains(search) ||
+                (application.Equipment != null &&
+                    application.Equipment.Contains(search)) ||
+                application.Field.Name.Contains(search) ||
+                application.FieldCrop.Crop.Name.Contains(search) ||
+                application.Worker.FullName.Contains(search) ||
+                application.Products.Any(product =>
+                    product.Product.Name.Contains(search) ||
+                    product.BatchNumber.Contains(search)));
+        }
+
+        var totalCount = await query.CountAsync(cancellationToken);
+
+        var items = await query
+            .OrderByDescending(application =>
+                application.ApplicationDateUtc)
+            .ThenByDescending(application =>
+                application.CreatedAtUtc)
+            .ThenByDescending(application =>
+                application.Id)
+            .Skip((request.Page - 1) * request.PageSize)
+            .Take(request.PageSize)
+            .Select(application =>
+                new PesticideApplicationHistoryItemResponse
+                {
+                    Id = application.Id,
+                    FarmId = application.FarmId,
+                    FieldId = application.FieldId,
+                    FieldName = application.Field.Name,
+                    FieldCropId = application.FieldCropId,
+                    CropName = application.FieldCrop.Crop.Name,
+                    WorkerId = application.WorkerId,
+                    WorkerName = application.Worker.FullName,
+                    ApplicationDateUtc = new DateTimeOffset(
+                        DateTime.SpecifyKind(
+                            application.ApplicationDateUtc,
+                            DateTimeKind.Utc)),
+                    TargetPest = application.TargetPest,
+                    ApplicationMethod =
+                        application.ApplicationMethod,
+                    AreaTreatedHectares =
+                        application.AreaTreatedHectares,
+                    Status =
+                        application.Status ==
+                        PesticideApplicationStatus.Draft
+                            ? "Draft"
+                            : "Completed",
+                    ProductCount = application.Products.Count,
+                    HasInventoryTraceability =
+                        application.Products.Count > 0 &&
+                        application.Products.All(product =>
+                            product.InventoryTransaction != null),
+                    CreatedByUserId =
+                        application.CreatedByUserId,
+                    CreatedByDisplayName =
+                        application.CreatedByUser.DisplayName,
+                    CreatedAtUtc = new DateTimeOffset(
+                        DateTime.SpecifyKind(
+                            application.CreatedAtUtc,
+                            DateTimeKind.Utc))
+                })
+            .ToListAsync(cancellationToken);
+
+        return Ok(new PesticideApplicationHistoryResponse
+        {
+            Page = request.Page,
+            PageSize = request.PageSize,
+            TotalCount = totalCount,
+            TotalPages = (int)Math.Ceiling(
+                totalCount / (double)request.PageSize),
+            Items = items
+        });
+    }
+
     // GET: api/farms/{farmId}/applications/{applicationId}
     [HttpGet("{applicationId:guid}")]
     [FarmPermission("applications.view")]
@@ -301,6 +448,8 @@ public sealed class PesticideApplicationsController : ControllerBase
             .Include(a => a.FieldCrop)
                 .ThenInclude(fc => fc.Crop)
             .Include(a => a.Worker)
+            .Include(a => a.WeatherRecord)
+            .Include(a => a.CreatedByUser)
             .Include(a => a.Products)
                 .ThenInclude(p => p.Product)
             .Include(a => a.Products)
@@ -725,7 +874,35 @@ public sealed class PesticideApplicationsController : ControllerBase
             Notes = application.Notes,
             Status = application.Status.ToString(),
             CreatedByUserId = application.CreatedByUserId,
+            CreatedByDisplayName =
+                application.CreatedByUser.DisplayName,
+            CreatedByEmail =
+                application.CreatedByUser.Email,
             CreatedAtUtc = application.CreatedAtUtc,
+            Weather = application.WeatherRecord is null
+                ? null
+                : new ApplicationWeatherResponse
+                {
+                    Id = application.WeatherRecord.Id,
+                    RecordedAtUtc = new DateTimeOffset(
+                        DateTime.SpecifyKind(
+                            application.WeatherRecord.RecordedAtUtc,
+                            DateTimeKind.Utc)),
+                    TemperatureCelsius =
+                        application.WeatherRecord.TemperatureCelsius,
+                    HumidityPercentage =
+                        application.WeatherRecord.HumidityPercentage,
+                    RainfallMillimeters =
+                        application.WeatherRecord.RainfallMillimeters,
+                    WindSpeedMetersPerSecond =
+                        application.WeatherRecord.WindSpeedMetersPerSecond,
+                    WindDirectionDegrees =
+                        application.WeatherRecord.WindDirectionDegrees,
+                    Conditions =
+                        application.WeatherRecord.Conditions,
+                    Source =
+                        application.WeatherRecord.Source
+                },
 
             Products = application.Products
                 .Select(p => new ApplicationProductResponse
@@ -738,7 +915,33 @@ public sealed class PesticideApplicationsController : ControllerBase
                     ApplicationRate = p.ApplicationRate,
                     RateUnit = p.RateUnit,
                     InventoryTransactionId =
-                        p.InventoryTransaction?.Id
+                        p.InventoryTransaction?.Id,
+                    InventoryTransaction =
+                        p.InventoryTransaction is null
+                            ? null
+                            : new ApplicationInventoryTransactionResponse
+                            {
+                                Id = p.InventoryTransaction.Id,
+                                TransactionType =
+                                    p.InventoryTransaction.TransactionType
+                                        .ToString(),
+                                Quantity =
+                                    p.InventoryTransaction.Quantity,
+                                BatchNumber =
+                                    p.InventoryTransaction.BatchNumber,
+                                ExpiryDate =
+                                    p.InventoryTransaction.ExpiryDate,
+                                Reference =
+                                    p.InventoryTransaction.Reference,
+                                Reason =
+                                    p.InventoryTransaction.Reason,
+                                CreatedByUserId =
+                                    p.InventoryTransaction.CreatedByUserId,
+                                CreatedAtUtc = new DateTimeOffset(
+                                    DateTime.SpecifyKind(
+                                        p.InventoryTransaction.CreatedAtUtc,
+                                        DateTimeKind.Utc))
+                            }
                 })
                 .ToList()
         };

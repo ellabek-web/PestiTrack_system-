@@ -198,6 +198,8 @@ namespace PestiTrackBackend.Data.Migrations
 
                     b.HasIndex("FarmId", "FieldId");
 
+                    b.HasIndex("FarmId", "Status", "ApplicationDateUtc");
+
                     b.ToTable("PesticideApplications", (string)null);
                 });
 
@@ -238,6 +240,77 @@ namespace PestiTrackBackend.Data.Migrations
                     b.HasIndex("ProductId");
 
                     b.ToTable("PesticideApplicationProducts", (string)null);
+                });
+
+            modelBuilder.Entity("PestiTrackBackend.Models.Auditing.AuditLog", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Action")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<string>("ActorDisplayName")
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.Property<string>("ActorEmail")
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)");
+
+                    b.Property<Guid?>("ActorUserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("ChangesJson")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("EntityId")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("EntityType")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.Property<Guid?>("FarmId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("HttpMethod")
+                        .HasMaxLength(10)
+                        .HasColumnType("nvarchar(10)");
+
+                    b.Property<string>("IpAddress")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<DateTime>("OccurredAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("RequestPath")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("UserAgent")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OccurredAtUtc");
+
+                    b.HasIndex("ActorUserId", "OccurredAtUtc");
+
+                    b.HasIndex("EntityType", "EntityId");
+
+                    b.HasIndex("FarmId", "OccurredAtUtc");
+
+                    b.ToTable("AuditLogs", (string)null);
                 });
 
             modelBuilder.Entity("PestiTrackBackend.Models.Authorization.FarmRole", b =>
@@ -1181,6 +1254,16 @@ namespace PestiTrackBackend.Data.Migrations
                     b.Navigation("PesticideApplication");
 
                     b.Navigation("Product");
+                });
+
+            modelBuilder.Entity("PestiTrackBackend.Models.Auditing.AuditLog", b =>
+                {
+                    b.HasOne("PestiTrackBackend.Models.Identity.ApplicationUser", "ActorUser")
+                        .WithMany()
+                        .HasForeignKey("ActorUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("ActorUser");
                 });
 
             modelBuilder.Entity("PestiTrackBackend.Models.Authorization.FarmRole", b =>

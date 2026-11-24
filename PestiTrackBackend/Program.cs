@@ -12,17 +12,24 @@ using PestiTrackBackend.Swagger;
 using PestiTrackBackend.Services.Authorization;
 using PestiTrackBackend.Security.Authorization;
 using Microsoft.AspNetCore.Authorization;
+using PestiTrackBackend.Services.Auditing;
 
 
 
 var builder = WebApplication.CreateBuilder(args);
 
+builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<AuditSaveChangesInterceptor>();
+
 // Register Entity Framework Core with SQL Server.
-builder.Services.AddDbContext<AppDbContext>(options =>
+builder.Services.AddDbContext<AppDbContext>((services, options) =>
+{
     options.UseSqlServer(
-        builder.Configuration.GetConnectionString("DefaultConnection")
-    )
-);
+        builder.Configuration.GetConnectionString("DefaultConnection"));
+    options.AddInterceptors(
+        services.GetRequiredService<AuditSaveChangesInterceptor>());
+});
 
 // Configure ASP.NET Core Identity.
 builder.Services
@@ -47,7 +54,16 @@ builder.Services
     })
     .AddRoles<ApplicationRole>()
     .AddEntityFrameworkStores<AppDbContext>()
-    .AddSignInManager();
+    .AddClaimsPrincipalFactory<
+        PestiTrackUserClaimsPrincipalFactory>()
+    .AddSignInManager()
+    .AddDefaultTokenProviders();
+
+builder.Services.Configure<SecurityStampValidatorOptions>(options =>
+{
+    // Quickly invalidate sessions after password, status, or role changes.
+    options.ValidationInterval = TimeSpan.FromMinutes(1);
+});
 
 // Configure cookie-based authentication.
 builder.Services
@@ -74,6 +90,9 @@ builder.Services
         options.ExpireTimeSpan = TimeSpan.FromMinutes(30);
         options.SlidingExpiration = true;
 
+        options.Events.OnValidatePrincipal =
+            SecurityStampValidator.ValidatePrincipalAsync;
+
         // Return HTTP status codes instead of redirecting API clients.
         options.Events.OnRedirectToLogin = context =>
         {
@@ -99,9 +118,6 @@ builder.Services.AddAuthorization();
 builder.Services.AddScoped<
     IFarmAuthorizationService,
     FarmAuthorizationService>();
-
-// Register HTTP context access for authorization handlers.
-builder.Services.AddHttpContextAccessor();
 
 // Register the dynamic farm permission policy provider.
 builder.Services.AddSingleton<

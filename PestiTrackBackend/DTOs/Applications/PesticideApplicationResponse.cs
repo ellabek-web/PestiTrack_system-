@@ -36,7 +36,13 @@ public sealed class PesticideApplicationResponse
 
     public Guid CreatedByUserId { get; set; }
 
+    public string CreatedByDisplayName { get; set; } = string.Empty;
+
+    public string? CreatedByEmail { get; set; }
+
     public DateTime CreatedAtUtc { get; set; }
+
+    public ApplicationWeatherResponse? Weather { get; set; }
 
     public List<ApplicationProductResponse> Products { get; set; } = new();
 }
@@ -58,4 +64,48 @@ public sealed class ApplicationProductResponse
     public string RateUnit { get; set; } = string.Empty;
 
     public Guid? InventoryTransactionId { get; set; }
+
+    public ApplicationInventoryTransactionResponse? InventoryTransaction { get; set; }
+}
+
+public sealed class ApplicationWeatherResponse
+{
+    public Guid Id { get; set; }
+
+    public DateTimeOffset RecordedAtUtc { get; set; }
+
+    public decimal? TemperatureCelsius { get; set; }
+
+    public decimal? HumidityPercentage { get; set; }
+
+    public decimal? RainfallMillimeters { get; set; }
+
+    public decimal? WindSpeedMetersPerSecond { get; set; }
+
+    public decimal? WindDirectionDegrees { get; set; }
+
+    public string? Conditions { get; set; }
+
+    public string Source { get; set; } = string.Empty;
+}
+
+public sealed class ApplicationInventoryTransactionResponse
+{
+    public Guid Id { get; set; }
+
+    public string TransactionType { get; set; } = string.Empty;
+
+    public decimal Quantity { get; set; }
+
+    public string? BatchNumber { get; set; }
+
+    public DateOnly? ExpiryDate { get; set; }
+
+    public string? Reference { get; set; }
+
+    public string? Reason { get; set; }
+
+    public Guid CreatedByUserId { get; set; }
+
+    public DateTimeOffset CreatedAtUtc { get; set; }
 }

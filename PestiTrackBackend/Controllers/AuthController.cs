@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using PestiTrackBackend.DTOs.Auth;
+using PestiTrackBackend.DTOs.Users;
 using PestiTrackBackend.Models.Identity;
 
 namespace PestiTrackBackend.Controllers;
@@ -143,6 +144,49 @@ public sealed class AuthController : ControllerBase
         return Ok(new
         {
             message = "Logout successful."
+        });
+    }
+
+    // POST: /api/auth/change-password
+    [HttpPost("change-password")]
+    [Authorize]
+    public async Task<IActionResult> ChangePassword(
+        ChangePasswordRequest request)
+    {
+        var user = await _userManager.GetUserAsync(User);
+
+        if (user is null || !user.IsActive)
+        {
+            await _signInManager.SignOutAsync();
+            return Unauthorized(new
+            {
+                message = "Authentication required."
+            });
+        }
+
+        var result = await _userManager.ChangePasswordAsync(
+            user,
+            request.CurrentPassword,
+            request.NewPassword);
+
+        if (!result.Succeeded)
+        {
+            return BadRequest(new
+            {
+                message = "Password change failed.",
+                errors = result.Errors.Select(error => new
+                {
+                    error.Code,
+                    error.Description
+                })
+            });
+        }
+
+        await _signInManager.RefreshSignInAsync(user);
+
+        return Ok(new
+        {
+            message = "Password changed successfully."
         });
     }
 }

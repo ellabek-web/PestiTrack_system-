@@ -10,6 +10,7 @@ using PestiTrackBackend.Models.Workers;
 using PestiTrackBackend.Models.Weather;
 using PestiTrackBackend.Models.Inventory;
 using PestiTrackBackend.Models.Applications;
+using PestiTrackBackend.Models.Auditing;
 
 
 
@@ -54,6 +55,7 @@ public sealed class AppDbContext
     public DbSet<PesticideApplicationProduct> PesticideApplicationProducts
         => Set<PesticideApplicationProduct>();
 
+    public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -95,6 +97,73 @@ public sealed class AppDbContext
         ConfigureWeather(builder);
         ConfigureInventory(builder);
         ConfigureApplications(builder);
+        ConfigureAuditLog(builder);
+    }
+
+    private static void ConfigureAuditLog(ModelBuilder builder)
+    {
+        builder.Entity<AuditLog>(entity =>
+        {
+            entity.ToTable("AuditLogs");
+
+            entity.HasKey(log => log.Id);
+
+            entity.Property(log => log.Action)
+                .HasMaxLength(50)
+                .IsRequired();
+
+            entity.Property(log => log.EntityType)
+                .HasMaxLength(150)
+                .IsRequired();
+
+            entity.Property(log => log.EntityId)
+                .HasMaxLength(500)
+                .IsRequired();
+
+            entity.Property(log => log.ChangesJson)
+                .HasColumnType("nvarchar(max)")
+                .IsRequired();
+
+            entity.Property(log => log.ActorDisplayName)
+                .HasMaxLength(150);
+
+            entity.Property(log => log.ActorEmail)
+                .HasMaxLength(256);
+
+            entity.Property(log => log.HttpMethod)
+                .HasMaxLength(10);
+
+            entity.Property(log => log.RequestPath)
+                .HasMaxLength(500);
+
+            entity.Property(log => log.IpAddress)
+                .HasMaxLength(64);
+
+            entity.Property(log => log.UserAgent)
+                .HasMaxLength(500);
+
+            entity.HasIndex(log => log.OccurredAtUtc);
+            entity.HasIndex(log => new
+            {
+                log.FarmId,
+                log.OccurredAtUtc
+            });
+            entity.HasIndex(log => new
+            {
+                log.ActorUserId,
+                log.OccurredAtUtc
+            });
+            entity.HasIndex(log => new
+            {
+                log.EntityType,
+                log.EntityId
+            });
+
+            entity.HasOne(log => log.ActorUser)
+                .WithMany()
+                .HasForeignKey(log => log.ActorUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
     }
 
     private static void ConfigureFarm(ModelBuilder builder)
@@ -663,6 +732,13 @@ public sealed class AppDbContext
         entity.HasIndex(application => new
         {
             application.FarmId,
+            application.ApplicationDateUtc
+        });
+
+        entity.HasIndex(application => new
+        {
+            application.FarmId,
+            application.Status,
             application.ApplicationDateUtc
         });
 
