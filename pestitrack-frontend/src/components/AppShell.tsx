@@ -1,8 +1,10 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
 import {
   AppBar,
   Avatar,
+  Badge,
   Box,
   Divider,
   Drawer,
@@ -32,26 +34,77 @@ import ScienceRoundedIcon from '@mui/icons-material/ScienceRounded'
 import SpaRoundedIcon from '@mui/icons-material/SpaRounded'
 import WaterDropRoundedIcon from '@mui/icons-material/WaterDropRounded'
 import AdminPanelSettingsRoundedIcon from '@mui/icons-material/AdminPanelSettingsRounded'
+import AssessmentRoundedIcon from '@mui/icons-material/AssessmentRounded'
+import NotificationsRoundedIcon from '@mui/icons-material/NotificationsRounded'
+import FactCheckRoundedIcon from '@mui/icons-material/FactCheckRounded'
+import HealthAndSafetyRoundedIcon from '@mui/icons-material/HealthAndSafetyRounded'
+import HistoryRoundedIcon from '@mui/icons-material/HistoryRounded'
+import ManageAccountsRoundedIcon from '@mui/icons-material/ManageAccountsRounded'
+import PersonRoundedIcon from '@mui/icons-material/PersonRounded'
+import DomainRoundedIcon from '@mui/icons-material/DomainRounded'
 import { useAuth } from '../auth/AuthContext'
 import { useFarm } from '../farms/FarmContext'
+import { apiRequest } from '../lib/api'
+import type { NotificationSummary } from '../types/api'
 
 const drawerWidth = 264
-const navigation = [
+
+interface NavItem {
+  label: string
+  path: string
+  icon: ReactNode
+  permission?: string
+  allowSystemAuditor?: boolean
+}
+
+const navigation: NavItem[] = [
   { label: 'Overview', path: '/', icon: <DashboardRoundedIcon /> },
-  { label: 'Fields', path: '/fields', icon: <GrassRoundedIcon /> },
-  { label: 'Crops', path: '/crops', icon: <SpaRoundedIcon /> },
+  { label: 'Fields', path: '/fields', icon: <GrassRoundedIcon />, permission: 'fields.view' },
+  { label: 'Crops', path: '/crops', icon: <SpaRoundedIcon />, permission: 'crops.view' },
   { label: 'Products', path: '/products', icon: <ScienceRoundedIcon /> },
-  { label: 'Workers', path: '/workers', icon: <PeopleRoundedIcon /> },
-  { label: 'Weather', path: '/weather', icon: <WaterDropRoundedIcon /> },
-  { label: 'Inventory', path: '/inventory', icon: <Inventory2RoundedIcon /> },
-  { label: 'Applications', path: '/applications', icon: <AppsRoundedIcon /> },
+  { label: 'Workers', path: '/workers', icon: <PeopleRoundedIcon />, permission: 'workers.view' },
+  { label: 'Weather', path: '/weather', icon: <WaterDropRoundedIcon />, permission: 'weather.view' },
+  { label: 'Inventory', path: '/inventory', icon: <Inventory2RoundedIcon />, permission: 'inventory.view' },
+  { label: 'Applications', path: '/applications', icon: <AppsRoundedIcon />, permission: 'applications.view' },
+  { label: 'Application history', path: '/application-history', icon: <HistoryRoundedIcon />, permission: 'applications.view' },
+  { label: 'Reports', path: '/reports', icon: <AssessmentRoundedIcon />, permission: 'reports.view' },
+  { label: 'Safety & compliance', path: '/compliance', icon: <HealthAndSafetyRoundedIcon />, permission: 'compliance.view' },
+  { label: 'Notifications', path: '/notifications', icon: <NotificationsRoundedIcon /> },
+  {
+    label: 'Audit trail',
+    path: '/audit',
+    icon: <FactCheckRoundedIcon />,
+    permission: 'audit.view',
+    allowSystemAuditor: true,
+  },
+  { label: 'My account', path: '/account', icon: <PersonRoundedIcon /> },
 ]
 
 export function AppShell() {
-  const { user, logout, isAdministrator } = useAuth()
-  const { farms, selectedFarmId, setSelectedFarmId } = useFarm()
+  const { user, logout, isAdministrator, isAuditor } = useAuth()
+  const { farms, selectedFarmId, setSelectedFarmId, hasPermission } = useFarm()
   const location = useLocation()
   const [mobileOpen, setMobileOpen] = useState(false)
+
+  const notificationsSummaryQuery = useQuery({
+    queryKey: ['notifications-summary', selectedFarmId],
+    queryFn: () =>
+      apiRequest<NotificationSummary>(
+        `/api/farms/${selectedFarmId}/notifications/unread-count`,
+      ),
+    enabled: Boolean(selectedFarmId),
+    staleTime: 60_000,
+    retry: false,
+  })
+  const unreadCount = notificationsSummaryQuery.data?.unreadCount ?? 0
+  const criticalCount = notificationsSummaryQuery.data?.criticalCount ?? 0
+
+  const visibleNavigation = navigation.filter((item) => {
+    if (!item.permission) return true
+    if (isAdministrator) return true
+    if (item.allowSystemAuditor && isAuditor) return true
+    return hasPermission(item.permission)
+  })
 
   const drawer = (
     <Stack sx={{ height: '100%' }}>
@@ -82,13 +135,23 @@ export function AppShell() {
       </Box>
       <List sx={{ px: 1.5, py: 0, flex: 1 }}>
         {[
-          ...navigation,
+          ...visibleNavigation,
           ...(isAdministrator
             ? [
                 {
-                  label: 'Administration',
+                  label: 'Farms',
+                  path: '/farms',
+                  icon: <DomainRoundedIcon />,
+                },
+                {
+                  label: 'Farm access',
                   path: '/administration',
                   icon: <AdminPanelSettingsRoundedIcon />,
+                },
+                {
+                  label: 'User accounts',
+                  path: '/users',
+                  icon: <ManageAccountsRoundedIcon />,
                 },
               ]
             : []),
@@ -104,7 +167,19 @@ export function AppShell() {
               onClick={() => setMobileOpen(false)}
               sx={{ borderRadius: 2, mb: 0.5 }}
             >
-              <ListItemIcon sx={{ minWidth: 40 }}>{item.icon}</ListItemIcon>
+              <ListItemIcon sx={{ minWidth: 40 }}>
+                {item.path === '/notifications' ? (
+                  <Badge
+                    badgeContent={unreadCount}
+                    color={criticalCount > 0 ? 'error' : 'warning'}
+                    max={99}
+                  >
+                    {item.icon}
+                  </Badge>
+                ) : (
+                  item.icon
+                )}
+              </ListItemIcon>
               <ListItemText primary={item.label} />
             </ListItemButton>
           )

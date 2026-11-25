@@ -27,6 +27,7 @@ import {
   Typography,
 } from '@mui/material'
 import AddRoundedIcon from '@mui/icons-material/AddRounded'
+import CloudSyncRoundedIcon from '@mui/icons-material/CloudSyncRounded'
 import EditRoundedIcon from '@mui/icons-material/EditRounded'
 import WaterDropRoundedIcon from '@mui/icons-material/WaterDropRounded'
 import { useFarm } from '../farms/FarmContext'
@@ -226,13 +227,20 @@ function WeatherForm({
 
 export function WeatherPage() {
   const queryClient = useQueryClient()
-  const { selectedFarmId, selectedFarm } = useFarm()
+  const { selectedFarmId, selectedFarm, hasPermission } = useFarm()
+  const canManage = hasPermission('weather.manage')
   const [fieldFilter, setFieldFilter] = useState('')
   const [fromDate, setFromDate] = useState('')
   const [toDate, setToDate] = useState('')
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editingRecord, setEditingRecord] = useState<WeatherRecord | null>(null)
   const [formError, setFormError] = useState('')
+  const [syncOpen, setSyncOpen] = useState(false)
+  const [syncFieldId, setSyncFieldId] = useState('')
+  const [syncLatitude, setSyncLatitude] = useState('')
+  const [syncLongitude, setSyncLongitude] = useState('')
+  const [syncNotes, setSyncNotes] = useState('')
+  const [syncError, setSyncError] = useState('')
 
   const fieldsQuery = useQuery({
     queryKey: ['fields', selectedFarmId],
@@ -286,6 +294,36 @@ export function WeatherPage() {
     setDialogOpen(true)
   }
 
+  const syncMutation = useMutation({
+    mutationFn: () =>
+      apiRequest<WeatherRecord>(`/api/farms/${selectedFarmId}/weather-records/sync`, {
+        method: 'POST',
+        body: JSON.stringify({
+          fieldId: syncFieldId || null,
+          latitude: syncLatitude.trim() === '' ? null : Number(syncLatitude),
+          longitude: syncLongitude.trim() === '' ? null : Number(syncLongitude),
+          notes: syncNotes.trim() || null,
+        }),
+      }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['weather', selectedFarmId] })
+      setSyncOpen(false)
+    },
+    onError: (caught) =>
+      setSyncError(
+        caught instanceof ApiError ? caught.message : 'Could not sync live weather.',
+      ),
+  })
+
+  const openSyncDialog = () => {
+    setSyncFieldId('')
+    setSyncLatitude(selectedFarm?.latitude != null ? String(selectedFarm.latitude) : '')
+    setSyncLongitude(selectedFarm?.longitude != null ? String(selectedFarm.longitude) : '')
+    setSyncNotes('')
+    setSyncError('')
+    setSyncOpen(true)
+  }
+
   const fieldName = (fieldId: string | null) =>
     fieldsQuery.data?.find((field) => field.id === fieldId)?.name ?? 'Whole farm'
 
@@ -309,9 +347,20 @@ export function WeatherPage() {
             Record weather conditions for {selectedFarm?.name}.
           </Typography>
         </Box>
-        <Button variant="contained" startIcon={<AddRoundedIcon />} onClick={() => openForm(null)}>
-          Record weather
-        </Button>
+        {canManage && (
+          <Stack direction="row" spacing={1}>
+            <Button
+              variant="outlined"
+              startIcon={<CloudSyncRoundedIcon />}
+              onClick={openSyncDialog}
+            >
+              Sync live weather
+            </Button>
+            <Button variant="contained" startIcon={<AddRoundedIcon />} onClick={() => openForm(null)}>
+              Record weather
+            </Button>
+          </Stack>
+        )}
       </Stack>
 
       {pageError && (
@@ -426,14 +475,16 @@ export function WeatherPage() {
                         : `${record.windSpeedMetersPerSecond} m/s`}
                     </TableCell>
                     <TableCell align="right">
-                      <Tooltip title="Edit weather record">
-                        <IconButton
-                          onClick={() => openForm(record)}
-                          aria-label="Edit weather record"
-                        >
-                          <EditRoundedIcon />
-                        </IconButton>
-                      </Tooltip>
+                      {canManage && (
+                        <Tooltip title="Edit weather record">
+                          <IconButton
+                            onClick={() => openForm(record)}
+                            aria-label="Edit weather record"
+                          >
+                            <EditRoundedIcon />
+                          </IconButton>
+                        </Tooltip>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))}
@@ -452,6 +503,81 @@ export function WeatherPage() {
         onClose={() => setDialogOpen(false)}
         onSave={(payload) => saveMutation.mutate(payload)}
       />
+
+      <Dialog
+        open={syncOpen}
+        onClose={syncMutation.isPending ? undefined : () => setSyncOpen(false)}
+        fullWidth
+        maxWidth="sm"
+      >
+        <Box
+          component="form"
+          onSubmit={(event) => {
+            event.preventDefault()
+            syncMutation.mutate()
+          }}
+        >
+          <DialogTitle>Sync live weather (Open-Meteo)</DialogTitle>
+          <DialogContent>
+            <Stack spacing={2.5} sx={{ pt: 1 }}>
+              {syncError && <Alert severity="error">{syncError}</Alert>}
+              <Alert severity="info">
+                Fetches current temperature, humidity, precipitation, wind speed, and wind direction from Open-Meteo and saves a new weather record.
+              </Alert>
+              <FormControl fullWidth>
+                <InputLabel id="sync-field-label">Field (optional)</InputLabel>
+                <Select
+                  labelId="sync-field-label"
+                  label="Field (optional)"
+                  value={syncFieldId}
+                  onChange={(event) => setSyncFieldId(event.target.value)}
+                >
+                  <MenuItem value="">Whole farm</MenuItem>
+                  {(fieldsQuery.data ?? [])
+                    .filter((field) => field.isActive)
+                    .map((field) => (
+                      <MenuItem key={field.id} value={field.id}>
+                        {field.name}
+                      </MenuItem>
+                    ))}
+                </Select>
+              </FormControl>
+              <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2 }}>
+                <TextField
+                  label="Latitude"
+                  type="number"
+                  value={syncLatitude}
+                  onChange={(event) => setSyncLatitude(event.target.value)}
+                  slotProps={{ htmlInput: { min: -90, max: 90, step: 'any' } }}
+                  required
+                />
+                <TextField
+                  label="Longitude"
+                  type="number"
+                  value={syncLongitude}
+                  onChange={(event) => setSyncLongitude(event.target.value)}
+                  slotProps={{ htmlInput: { min: -180, max: 180, step: 'any' } }}
+                  required
+                />
+              </Box>
+              <TextField
+                label="Notes (optional)"
+                value={syncNotes}
+                onChange={(event) => setSyncNotes(event.target.value)}
+                slotProps={{ htmlInput: { maxLength: 1000 } }}
+              />
+            </Stack>
+          </DialogContent>
+          <DialogActions sx={{ p: 3, pt: 1 }}>
+            <Button onClick={() => setSyncOpen(false)} disabled={syncMutation.isPending}>
+              Cancel
+            </Button>
+            <Button type="submit" variant="contained" disabled={syncMutation.isPending}>
+              {syncMutation.isPending ? 'Syncing…' : 'Fetch & save weather'}
+            </Button>
+          </DialogActions>
+        </Box>
+      </Dialog>
     </Stack>
   )
 }

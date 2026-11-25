@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using PestiTrackBackend.Models.Auditing;
 using PestiTrackBackend.Models.Farms;
+using PestiTrackBackend.Models.Notifications;
 using PestiTrackBackend.Security.Authorization;
 
 namespace PestiTrackBackend.Services.Auditing;
@@ -72,6 +73,7 @@ public sealed class AuditSaveChangesInterceptor : SaveChangesInterceptor
             .Entries()
             .Where(entry =>
                 entry.Entity is not AuditLog &&
+                entry.Entity is not FarmNotification &&
                 entry.State is EntityState.Added or
                     EntityState.Modified or
                     EntityState.Deleted)

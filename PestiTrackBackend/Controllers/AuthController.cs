@@ -3,9 +3,11 @@ using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using PestiTrackBackend.DTOs.Auth;
 using PestiTrackBackend.DTOs.Users;
 using PestiTrackBackend.Models.Identity;
+using PestiTrackBackend.Security.RateLimiting;
 
 namespace PestiTrackBackend.Controllers;
 
@@ -45,6 +47,7 @@ public sealed class AuthController : ControllerBase
     // POST: /api/auth/login
     [HttpPost("login")]
     [AllowAnonymous]
+    [EnableRateLimiting(RateLimitPolicies.Auth)]
     public async Task<IActionResult> Login(
         [FromBody] LoginRequest request)
     {
@@ -150,6 +153,7 @@ public sealed class AuthController : ControllerBase
     // POST: /api/auth/change-password
     [HttpPost("change-password")]
     [Authorize]
+    [EnableRateLimiting(RateLimitPolicies.Auth)]
     public async Task<IActionResult> ChangePassword(
         ChangePasswordRequest request)
     {

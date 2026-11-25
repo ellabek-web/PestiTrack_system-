@@ -47,6 +47,14 @@ public sealed class ProductsController : ControllerBase
                 Formulation = product.Formulation,
                 Concentration = product.Concentration,
                 HazardClass = product.HazardClass,
+                SignalWord = product.SignalWord,
+                RegistrationExpiryDate = product.RegistrationExpiryDate,
+                PreHarvestIntervalDays = product.PreHarvestIntervalDays,
+                ReEntryIntervalHours = product.ReEntryIntervalHours,
+                MaxApplicationRate = product.MaxApplicationRate,
+                MaxApplicationRateUnit = product.MaxApplicationRateUnit,
+                MaxWindSpeedMetersPerSecond = product.MaxWindSpeedMetersPerSecond,
+                LabelNotes = product.LabelNotes,
                 Description = product.Description,
                 IsActive = product.IsActive,
                 CreatedAtUtc = product.CreatedAtUtc
@@ -82,6 +90,14 @@ public sealed class ProductsController : ControllerBase
                 Formulation = product.Formulation,
                 Concentration = product.Concentration,
                 HazardClass = product.HazardClass,
+                SignalWord = product.SignalWord,
+                RegistrationExpiryDate = product.RegistrationExpiryDate,
+                PreHarvestIntervalDays = product.PreHarvestIntervalDays,
+                ReEntryIntervalHours = product.ReEntryIntervalHours,
+                MaxApplicationRate = product.MaxApplicationRate,
+                MaxApplicationRateUnit = product.MaxApplicationRateUnit,
+                MaxWindSpeedMetersPerSecond = product.MaxWindSpeedMetersPerSecond,
+                LabelNotes = product.LabelNotes,
                 Description = product.Description,
                 IsActive = product.IsActive,
                 CreatedAtUtc = product.CreatedAtUtc
@@ -115,6 +131,14 @@ public sealed class ProductsController : ControllerBase
             Formulation = Normalize(request.Formulation),
             Concentration = Normalize(request.Concentration),
             HazardClass = Normalize(request.HazardClass),
+            SignalWord = Normalize(request.SignalWord),
+            RegistrationExpiryDate = request.RegistrationExpiryDate,
+            PreHarvestIntervalDays = request.PreHarvestIntervalDays,
+            ReEntryIntervalHours = request.ReEntryIntervalHours,
+            MaxApplicationRate = request.MaxApplicationRate,
+            MaxApplicationRateUnit = Normalize(request.MaxApplicationRateUnit),
+            MaxWindSpeedMetersPerSecond = request.MaxWindSpeedMetersPerSecond,
+            LabelNotes = Normalize(request.LabelNotes),
             Description = Normalize(request.Description),
             IsActive = true,
             CreatedAtUtc = DateTime.UtcNow
@@ -160,6 +184,14 @@ public sealed class ProductsController : ControllerBase
         product.Formulation = Normalize(request.Formulation);
         product.Concentration = Normalize(request.Concentration);
         product.HazardClass = Normalize(request.HazardClass);
+        product.SignalWord = Normalize(request.SignalWord);
+        product.RegistrationExpiryDate = request.RegistrationExpiryDate;
+        product.PreHarvestIntervalDays = request.PreHarvestIntervalDays;
+        product.ReEntryIntervalHours = request.ReEntryIntervalHours;
+        product.MaxApplicationRate = request.MaxApplicationRate;
+        product.MaxApplicationRateUnit = Normalize(request.MaxApplicationRateUnit);
+        product.MaxWindSpeedMetersPerSecond = request.MaxWindSpeedMetersPerSecond;
+        product.LabelNotes = Normalize(request.LabelNotes);
         product.Description = Normalize(request.Description);
 
         await _db.SaveChangesAsync(cancellationToken);
@@ -207,6 +239,14 @@ public sealed class ProductsController : ControllerBase
             Formulation = product.Formulation,
             Concentration = product.Concentration,
             HazardClass = product.HazardClass,
+            SignalWord = product.SignalWord,
+            RegistrationExpiryDate = product.RegistrationExpiryDate,
+            PreHarvestIntervalDays = product.PreHarvestIntervalDays,
+            ReEntryIntervalHours = product.ReEntryIntervalHours,
+            MaxApplicationRate = product.MaxApplicationRate,
+            MaxApplicationRateUnit = product.MaxApplicationRateUnit,
+            MaxWindSpeedMetersPerSecond = product.MaxWindSpeedMetersPerSecond,
+            LabelNotes = product.LabelNotes,
             Description = product.Description,
             IsActive = product.IsActive,
             CreatedAtUtc = product.CreatedAtUtc

@@ -295,6 +295,15 @@ public sealed class DashboardControllerTests
             return Task.FromResult(
                 _permissions.Contains(permissionCode));
         }
+
+        public Task<IReadOnlyList<string>> GetPermissionsAsync(
+            Guid userId,
+            Guid farmId,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult<IReadOnlyList<string>>(
+                _permissions.ToList());
+        }
     }
 
     private sealed class FixedTimeProvider(

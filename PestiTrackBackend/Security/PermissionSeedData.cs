@@ -44,6 +44,20 @@ public static class PermissionSeedData
             Code = PermissionCodes.InventoryIssue,
             Name = "Issue inventory",
             Description = "Issue pesticide products from farm inventory."
+        },
+        new()
+        {
+            Id = Guid.Parse("10000000-0000-0000-0000-000000000024"),
+            Code = PermissionCodes.ComplianceView,
+            Name = "View safety and compliance",
+            Description = "View certification monitoring, safety intervals, and compliance records."
+        },
+        new()
+        {
+            Id = Guid.Parse("10000000-0000-0000-0000-000000000025"),
+            Code = PermissionCodes.ComplianceManage,
+            Name = "Manage safety and compliance",
+            Description = "Create and update farm compliance records and corrective actions."
         }
     ];
 }

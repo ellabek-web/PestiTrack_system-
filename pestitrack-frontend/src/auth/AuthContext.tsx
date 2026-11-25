@@ -2,11 +2,12 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   type PropsWithChildren,
 } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { ApiError, apiRequest } from '../lib/api'
+import { ApiError, apiRequest, registerUnauthorizedHandler } from '../lib/api'
 import type { AuthResponse, LoginResponse, User } from '../types/api'
 
 /* oxlint-disable react/only-export-components -- provider and hook form one public context API */
@@ -15,6 +16,7 @@ interface AuthContextValue {
   user: User | null
   isLoading: boolean
   isAdministrator: boolean
+  isAuditor: boolean
   login: (email: string, password: string) => Promise<void>
   logout: () => Promise<void>
 }
@@ -55,6 +57,16 @@ export function AuthProvider({ children }: PropsWithChildren) {
     await apiRequest('/api/auth/logout', { method: 'POST' })
     queryClient.setQueryData(authQueryKey, null)
     queryClient.removeQueries({ queryKey: ['farms'] })
+    queryClient.removeQueries({ queryKey: ['farm-permissions'] })
+  }, [queryClient])
+
+  useEffect(() => {
+    registerUnauthorizedHandler(() => {
+      queryClient.setQueryData(authQueryKey, null)
+      queryClient.removeQueries({ queryKey: ['farms'] })
+      queryClient.removeQueries({ queryKey: ['farm-permissions'] })
+    })
+    return () => registerUnauthorizedHandler(null)
   }, [queryClient])
 
   const value = useMemo(
@@ -62,6 +74,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
       user,
       isLoading,
       isAdministrator: user?.systemRoles.includes('SystemAdministrator') ?? false,
+      isAuditor: user?.systemRoles.includes('SystemAuditor') ?? false,
       login,
       logout,
     }),

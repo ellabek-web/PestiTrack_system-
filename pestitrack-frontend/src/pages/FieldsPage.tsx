@@ -131,7 +131,8 @@ function FieldForm({ open, field, saving, error, onClose, onSave }: FieldFormPro
 
 export function FieldsPage() {
   const queryClient = useQueryClient()
-  const { selectedFarmId, selectedFarm } = useFarm()
+  const { selectedFarmId, selectedFarm, hasPermission } = useFarm()
+  const canManage = hasPermission('fields.manage')
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editingField, setEditingField] = useState<Field | null>(null)
   const [formError, setFormError] = useState('')
@@ -207,9 +208,11 @@ export function FieldsPage() {
             Manage land areas for {selectedFarm?.name}.
           </Typography>
         </Box>
-        <Button variant="contained" startIcon={<AddRoundedIcon />} onClick={openCreate}>
-          Add field
-        </Button>
+        {canManage && (
+          <Button variant="contained" startIcon={<AddRoundedIcon />} onClick={openCreate}>
+            Add field
+          </Button>
+        )}
       </Stack>
 
       {statusMutation.error && (
@@ -239,9 +242,11 @@ export function FieldsPage() {
             <Typography color="text.secondary">
               Add the first field to start planning crops and applications.
             </Typography>
-            <Button startIcon={<AddRoundedIcon />} onClick={openCreate}>
-              Add field
-            </Button>
+            {canManage && (
+              <Button startIcon={<AddRoundedIcon />} onClick={openCreate}>
+                Add field
+              </Button>
+            )}
           </Stack>
         ) : (
           <TableContainer>
@@ -280,7 +285,7 @@ export function FieldsPage() {
                           size="small"
                           checked={field.isActive}
                           onChange={() => statusMutation.mutate(field)}
-                          disabled={statusMutation.isPending}
+                          disabled={!canManage || statusMutation.isPending}
                           slotProps={{
                             input: { 'aria-label': `Toggle ${field.name} status` },
                           }}
@@ -291,11 +296,13 @@ export function FieldsPage() {
                       </Stack>
                     </TableCell>
                     <TableCell align="right">
-                      <Tooltip title="Edit field">
-                        <IconButton onClick={() => openEdit(field)} aria-label={`Edit ${field.name}`}>
-                          <EditRoundedIcon />
-                        </IconButton>
-                      </Tooltip>
+                      {canManage && (
+                        <Tooltip title="Edit field">
+                          <IconButton onClick={() => openEdit(field)} aria-label={`Edit ${field.name}`}>
+                            <EditRoundedIcon />
+                          </IconButton>
+                        </Tooltip>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))}

@@ -11,6 +11,8 @@ using PestiTrackBackend.Models.Weather;
 using PestiTrackBackend.Models.Inventory;
 using PestiTrackBackend.Models.Applications;
 using PestiTrackBackend.Models.Auditing;
+using PestiTrackBackend.Models.Compliance;
+using PestiTrackBackend.Models.Notifications;
 
 
 
@@ -49,6 +51,9 @@ public sealed class AppDbContext
     public DbSet<InventoryTransaction> InventoryTransactions
         => Set<InventoryTransaction>();
 
+    public DbSet<InventoryThreshold> InventoryThresholds
+        => Set<InventoryThreshold>();
+
     public DbSet<PesticideApplication> PesticideApplications
         => Set<PesticideApplication>();
 
@@ -56,6 +61,12 @@ public sealed class AppDbContext
         => Set<PesticideApplicationProduct>();
 
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
+
+    public DbSet<ComplianceRecord> ComplianceRecords
+        => Set<ComplianceRecord>();
+
+    public DbSet<FarmNotification> FarmNotifications
+        => Set<FarmNotification>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -98,6 +109,9 @@ public sealed class AppDbContext
         ConfigureInventory(builder);
         ConfigureApplications(builder);
         ConfigureAuditLog(builder);
+        ConfigureComplianceRecord(builder);
+        ConfigureInventoryThreshold(builder);
+        ConfigureFarmNotification(builder);
     }
 
     private static void ConfigureAuditLog(ModelBuilder builder)
@@ -184,6 +198,12 @@ public sealed class AppDbContext
 
             entity.Property(f => f.Location)
                 .HasMaxLength(300);
+
+            entity.Property(f => f.Latitude)
+                .HasPrecision(9, 6);
+
+            entity.Property(f => f.Longitude)
+                .HasPrecision(9, 6);
 
             entity.HasIndex(f => f.Code)
                 .IsUnique();
@@ -485,6 +505,21 @@ public sealed class AppDbContext
 
             entity.Property(product => product.HazardClass)
                 .HasMaxLength(100);
+
+            entity.Property(product => product.SignalWord)
+                .HasMaxLength(50);
+
+            entity.Property(product => product.MaxApplicationRate)
+                .HasPrecision(18, 4);
+
+            entity.Property(product => product.MaxApplicationRateUnit)
+                .HasMaxLength(50);
+
+            entity.Property(product => product.MaxWindSpeedMetersPerSecond)
+                .HasPrecision(6, 2);
+
+            entity.Property(product => product.LabelNotes)
+                .HasMaxLength(2000);
 
             entity.Property(product => product.Description)
                 .HasMaxLength(1000);
@@ -819,5 +854,162 @@ public sealed class AppDbContext
         });
     }
 
+    private static void ConfigureComplianceRecord(ModelBuilder builder)
+    {
+        builder.Entity<ComplianceRecord>(entity =>
+        {
+            entity.ToTable("ComplianceRecords");
 
+            entity.HasKey(record => record.Id);
+
+            entity.Property(record => record.RecordType)
+                .HasConversion<string>()
+                .HasMaxLength(50)
+                .IsRequired();
+
+            entity.Property(record => record.Title)
+                .HasMaxLength(200)
+                .IsRequired();
+
+            entity.Property(record => record.Status)
+                .HasConversion<string>()
+                .HasMaxLength(30)
+                .IsRequired();
+
+            entity.Property(record => record.Severity)
+                .HasConversion<string>()
+                .HasMaxLength(30)
+                .IsRequired();
+
+            entity.Property(record => record.InspectorName)
+                .HasMaxLength(150);
+
+            entity.Property(record => record.Findings)
+                .HasMaxLength(2000);
+
+            entity.Property(record => record.CorrectiveAction)
+                .HasMaxLength(2000);
+
+            entity.HasIndex(record => new
+            {
+                record.FarmId,
+                record.Status,
+                record.CheckedAtUtc
+            });
+
+            entity.HasIndex(record => new
+            {
+                record.FarmId,
+                record.RecordType
+            });
+
+            entity.HasOne(record => record.Farm)
+                .WithMany()
+                .HasForeignKey(record => record.FarmId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(record => record.Field)
+                .WithMany()
+                .HasForeignKey(record => record.FieldId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(record => record.PesticideApplication)
+                .WithMany()
+                .HasForeignKey(record => record.PesticideApplicationId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(record => record.Worker)
+                .WithMany()
+                .HasForeignKey(record => record.WorkerId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(record => record.CreatedByUser)
+                .WithMany()
+                .HasForeignKey(record => record.CreatedByUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+    }
+
+    private static void ConfigureInventoryThreshold(ModelBuilder builder)
+    {
+        builder.Entity<InventoryThreshold>(entity =>
+        {
+            entity.ToTable("InventoryThresholds");
+
+            entity.HasKey(threshold => threshold.Id);
+
+            entity.Property(threshold => threshold.MinimumQuantity)
+                .HasPrecision(18, 3)
+                .IsRequired();
+
+            entity.HasIndex(threshold => new
+            {
+                threshold.FarmId,
+                threshold.ProductId
+            }).IsUnique();
+
+            entity.HasOne(threshold => threshold.Farm)
+                .WithMany()
+                .HasForeignKey(threshold => threshold.FarmId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(threshold => threshold.Product)
+                .WithMany()
+                .HasForeignKey(threshold => threshold.ProductId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+    }
+
+    private static void ConfigureFarmNotification(ModelBuilder builder)
+    {
+        builder.Entity<FarmNotification>(entity =>
+        {
+            entity.ToTable("FarmNotifications");
+
+            entity.HasKey(notification => notification.Id);
+
+            entity.Property(notification => notification.DeduplicationKey)
+                .HasMaxLength(200)
+                .IsRequired();
+
+            entity.Property(notification => notification.Category)
+                .HasConversion<string>()
+                .HasMaxLength(50)
+                .IsRequired();
+
+            entity.Property(notification => notification.Severity)
+                .HasConversion<string>()
+                .HasMaxLength(20)
+                .IsRequired();
+
+            entity.Property(notification => notification.Title)
+                .HasMaxLength(200)
+                .IsRequired();
+
+            entity.Property(notification => notification.Message)
+                .HasMaxLength(1000)
+                .IsRequired();
+
+            entity.Property(notification => notification.ActionPath)
+                .HasMaxLength(200);
+
+            entity.HasIndex(notification => new
+            {
+                notification.FarmId,
+                notification.DeduplicationKey
+            }).IsUnique();
+
+            entity.HasIndex(notification => new
+            {
+                notification.FarmId,
+                notification.IsResolved,
+                notification.IsRead
+            });
+
+            entity.HasOne(notification => notification.Farm)
+                .WithMany()
+                .HasForeignKey(notification => notification.FarmId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+    }
 }

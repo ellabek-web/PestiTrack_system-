@@ -1,0 +1,65 @@
+services:
+  db:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    restart: unless-stopped
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_PID: "Express"
+      MSSQL_SA_PASSWORD: "${SQL_SA_PASSWORD:?Set SQL_SA_PASSWORD in .env}"
+    ports:
+      - "${SQL_PORT:-1433}:1433"
+    volumes:
+      - pestitrack_sql_data:/var/opt/mssql
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P \"$${MSSQL_SA_PASSWORD}\" -C -Q 'SELECT 1' || exit 1"
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  backend:
+    build:
+      context: ./PestiTrackBackend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__DefaultConnection: "Server=db,1433;Database=${SQL_DATABASE:-PestiTrackDb};User Id=sa;Password=${SQL_SA_PASSWORD};TrustServerCertificate=True;Encrypt=True"
+      ReverseProxy__TrustForwardedHeaders: "true"
+      ReverseProxy__TerminateTlsExternally: "true"
+      RateLimiting__GlobalPermitLimitPerMinute: "${RATE_LIMIT_GLOBAL_PER_MINUTE:-200}"
+      RateLimiting__AuthPermitLimitPerMinute: "${RATE_LIMIT_AUTH_PER_MINUTE:-10}"
+    ports:
+      - "${BACKEND_PORT:-8080}:8080"
+    healthcheck:
+      test: ["CMD", "dotnet", "PestiTrackBackend.dll", "--healthcheck"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  frontend:
+    build:
+      context: ./pestitrack-frontend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "${FRONTEND_HTTP_PORT:-8081}:80"
+      - "${FRONTEND_HTTPS_PORT:-8443}:443"
+    # Optional: mount real TLS certificates (tls.crt and tls.key) instead of using the auto-generated self-signed cert:
+    # volumes:
+    #   - ./certs:/etc/nginx/certs:ro
+
+volumes:
+  pestitrack_sql_data:

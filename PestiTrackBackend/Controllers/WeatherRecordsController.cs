@@ -6,6 +6,7 @@ using PestiTrackBackend.Data;
 using PestiTrackBackend.DTOs.Weather;
 using PestiTrackBackend.Models.Weather;
 using PestiTrackBackend.Security.Authorization;
+using PestiTrackBackend.Services.Weather;
 
 namespace PestiTrackBackend.Controllers;
 
@@ -15,10 +16,14 @@ namespace PestiTrackBackend.Controllers;
 public sealed class WeatherRecordsController : ControllerBase
 {
     private readonly AppDbContext _db;
+    private readonly IExternalWeatherProvider _weatherProvider;
 
-    public WeatherRecordsController(AppDbContext db)
+    public WeatherRecordsController(
+        AppDbContext db,
+        IExternalWeatherProvider weatherProvider)
     {
         _db = db;
+        _weatherProvider = weatherProvider;
     }
 
     // GET: api/farms/{farmId}/weather-records
@@ -178,6 +183,88 @@ public sealed class WeatherRecordsController : ControllerBase
                 weatherRecordId = record.Id
             },
             response);
+    }
+
+    // POST: api/farms/{farmId}/weather-records/sync
+    [HttpPost("sync")]
+    [FarmPermission("weather.manage")]
+    public async Task<ActionResult<WeatherRecordResponse>> SyncCurrentWeather(
+        Guid farmId,
+        [FromBody] SyncWeatherRequest? request,
+        CancellationToken cancellationToken)
+    {
+        var farm = await _db.Farms
+            .AsNoTracking()
+            .FirstOrDefaultAsync(
+                f => f.Id == farmId && f.IsActive,
+                cancellationToken);
+
+        if (farm is null)
+            return NotFound(new { message = "Farm not found or inactive." });
+
+        var fieldId = request?.FieldId;
+        if (!await ValidateFieldAsync(farmId, fieldId))
+        {
+            return BadRequest(new
+            {
+                message = "The specified field does not exist, is inactive, or does not belong to this farm."
+            });
+        }
+
+        var latitude = request?.Latitude ?? farm.Latitude;
+        var longitude = request?.Longitude ?? farm.Longitude;
+
+        if (!latitude.HasValue || !longitude.HasValue)
+        {
+            return BadRequest(new
+            {
+                message = "Farm coordinates are not configured. Set latitude and longitude on the farm or provide them in the sync request."
+            });
+        }
+
+        ExternalWeatherReading reading;
+        try
+        {
+            reading = await _weatherProvider.FetchCurrentAsync(
+                latitude.Value,
+                longitude.Value,
+                cancellationToken);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or InvalidOperationException)
+        {
+            return StatusCode(
+                StatusCodes.Status502BadGateway,
+                new { message = $"Could not fetch weather from external provider: {ex.Message}" });
+        }
+
+        var record = new WeatherRecord
+        {
+            FarmId = farmId,
+            FieldId = fieldId,
+            RecordedAtUtc = reading.RecordedAtUtc,
+            TemperatureCelsius = reading.TemperatureCelsius,
+            HumidityPercentage = reading.HumidityPercentage,
+            RainfallMillimeters = reading.RainfallMillimeters,
+            WindSpeedMetersPerSecond = reading.WindSpeedMetersPerSecond,
+            WindDirectionDegrees = reading.WindDirectionDegrees,
+            Conditions = Normalize(reading.Conditions),
+            Source = Normalize(reading.Source) ?? "Open-Meteo",
+            Notes = Normalize(request?.Notes) ??
+                    $"Synced from {reading.Source} ({latitude.Value:0.####}, {longitude.Value:0.####})",
+            CreatedAtUtc = DateTime.UtcNow
+        };
+
+        _db.WeatherRecords.Add(record);
+        await _db.SaveChangesAsync(cancellationToken);
+
+        return CreatedAtAction(
+            nameof(GetById),
+            new
+            {
+                farmId,
+                weatherRecordId = record.Id
+            },
+            MapResponse(record));
     }
 
     // PUT: api/farms/{farmId}/weather-records/{weatherRecordId}

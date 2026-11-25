@@ -50,11 +50,53 @@ public sealed class AdminBootstrapper
             return 1;
         }
 
-        Console.Write("Administrator display name: ");
-        var displayName = Console.ReadLine()?.Trim();
+        var envDisplayName = Environment.GetEnvironmentVariable(
+            "PESTITRACK_BOOTSTRAP_ADMIN_DISPLAY_NAME")?.Trim();
+        var envEmail = Environment.GetEnvironmentVariable(
+            "PESTITRACK_BOOTSTRAP_ADMIN_EMAIL")?.Trim();
+        var envPassword = Environment.GetEnvironmentVariable(
+            "PESTITRACK_BOOTSTRAP_ADMIN_PASSWORD");
 
-        Console.Write("Administrator email: ");
-        var email = Console.ReadLine()?.Trim();
+        string? displayName;
+        string? email;
+        string password;
+        string confirmation;
+
+        if (!string.IsNullOrWhiteSpace(envDisplayName) &&
+            !string.IsNullOrWhiteSpace(envEmail) &&
+            !string.IsNullOrEmpty(envPassword))
+        {
+            displayName = envDisplayName;
+            email = envEmail;
+            password = envPassword;
+            confirmation = envPassword;
+        }
+        else
+        {
+            Console.Write("Administrator display name: ");
+            displayName = Console.ReadLine()?.Trim();
+
+            Console.Write("Administrator email: ");
+            email = Console.ReadLine()?.Trim();
+
+            if (string.IsNullOrWhiteSpace(displayName) ||
+                displayName.Length > 150 ||
+                string.IsNullOrWhiteSpace(email))
+            {
+                Console.Error.WriteLine("Invalid display name or email.");
+                return 1;
+            }
+
+            Console.Write("Administrator password: ");
+            password = ReadPassword();
+
+            Console.WriteLine();
+
+            Console.Write("Confirm password: ");
+            confirmation = ReadPassword();
+
+            Console.WriteLine();
+        }
 
         if (string.IsNullOrWhiteSpace(displayName) ||
             displayName.Length > 150 ||
@@ -64,25 +106,15 @@ public sealed class AdminBootstrapper
             return 1;
         }
 
-        Console.Write("Administrator password: ");
-        var password = ReadPassword();
+        if (password.Length < 8 ||
+            !password.Any(char.IsDigit) ||
+            password != confirmation)
+        {
+            Console.Error.WriteLine(
+                "Password must be at least 8 characters, contain at least one digit, and match confirmation.");
 
-        Console.WriteLine();
-
-        Console.Write("Confirm password: ");
-        var confirmation = ReadPassword();
-
-        Console.WriteLine();
-
-       if (password.Length < 8 ||
-    password.Any(c => !char.IsDigit(c)) ||
-    password != confirmation)
-{
-    Console.Error.WriteLine(
-        "Password must contain at least 8 digits, and both passwords must match.");
-
-    return 1;
-}
+            return 1;
+        }
 
         // Recheck and create within one serializable transaction.
         await using var transaction =

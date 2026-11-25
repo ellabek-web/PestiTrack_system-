@@ -28,6 +28,10 @@ Both endpoints require the farm permission `applications.view`.
 
 ## Farm dashboard
 
+`GET /api/farms/{farmId}/permissions` returns the current authenticated user's
+effective permission codes for a farm (system administrators receive the full
+permission catalog).
+
 `GET /api/dashboard` provides system-wide totals for farms, fields, active crop
 assignments, workers, stocked products, and applications. It is restricted to
 the `SystemAdministrator` role.
@@ -129,6 +133,52 @@ administrative history:
 List endpoints support `fromUtc`, `toUtc`, `actorUserId`, `action`,
 `entityType`, `search`, `page`, and `pageSize`. The system endpoint additionally
 supports `farmId`. Audit records are append-only through the API.
+
+## Safety and compliance
+
+Products support label safety restrictions (`signalWord`,
+`registrationExpiryDate`, `preHarvestIntervalDays`, `reEntryIntervalHours`,
+`maxApplicationRate`, `maxApplicationRateUnit`, `maxWindSpeedMetersPerSecond`,
+and `labelNotes`).
+
+Pesticide applications enforce product registration validity, label maximum
+application rates, weather wind-speed limits, and batch expiry on completion,
+and expose a live safety evaluation endpoint:
+
+- `GET /api/farms/{farmId}/applications/{applicationId}/safety-check` (`applications.view`)
+
+Farm-scoped compliance monitoring and inspection/incident tracking endpoints:
+
+- `GET /api/farms/{farmId}/compliance/overview` (`compliance.view`) — applicator certification statuses, active REI holds, active PHI holds (including expected-harvest conflicts), expiring/expired product registrations, and compliance record counts
+- `GET /api/farms/{farmId}/compliance/records` (`compliance.view`) — filtered, paginated compliance records
+- `POST /api/farms/{farmId}/compliance/records` (`compliance.manage`) — create compliance record
+- `PUT /api/farms/{farmId}/compliance/records/{recordId}` (`compliance.manage`) — update compliance record
+- `PATCH /api/farms/{farmId}/compliance/records/{recordId}/status` (`compliance.manage`) — update status and corrective action
+
+## Notifications, low-stock thresholds, and live weather sync
+
+- **Low-stock thresholds** (`inventory.view` / `inventory.manage`):
+  - `GET /api/farms/{farmId}/inventory/thresholds`
+  - `PUT /api/farms/{farmId}/inventory/thresholds/{productId}`
+  - `DELETE /api/farms/{farmId}/inventory/thresholds/{productId}`
+- **Farm notifications** (filtered automatically by the signed-in user's farm permissions):
+  - `GET /api/farms/{farmId}/notifications` — synchronizes and returns paginated alerts for low stock, expiring/expired batches, expiring/expired applicator certifications, active REI holds, PHI harvest conflicts, product registrations, and overdue/non-compliant compliance records
+  - `GET /api/farms/{farmId}/notifications/unread-count`
+  - `PATCH /api/farms/{farmId}/notifications/{notificationId}/read`
+  - `POST /api/farms/{farmId}/notifications/mark-all-read`
+- **External weather integration (Open-Meteo)**:
+  - Farms support optional `latitude` and `longitude` coordinates.
+  - `POST /api/farms/{farmId}/weather-records/sync` (`weather.manage`) — fetches real-time conditions from Open-Meteo using request or farm coordinates and stores a `WeatherRecord`.
+
+## Security hardening and health checks
+
+- **Global exception handling**: Unhandled exceptions are converted to RFC 7807 `ProblemDetails` JSON without leaking internal stack traces or database details in non-development environments.
+- **Security headers**: Adds `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy`, `X-Permitted-Cross-Domain-Policies`, `Cache-Control: no-store` on `/api/*`, and `HSTS` in non-development environments.
+- **Rate limiting**: Per-IP global rate limiting (`RateLimiting:GlobalPermitLimitPerMinute`, default `200/min`) and stricter authentication rate limiting (`RateLimiting:AuthPermitLimitPerMinute`, default `10/min`) on `/api/auth/login` and `/api/auth/change-password`.
+- **Health probes**:
+  - `GET /health/live` — liveness probe
+  - `GET /health/ready` — readiness probe verifying SQL Server connectivity
+- **Reverse-proxy & CORS readiness**: `ForwardedHeaders` enabled (`X-Forwarded-For`, `X-Forwarded-Proto`) and optional credentialed `Cors:AllowedOrigins` configuration.
 
 ## Development commands
 

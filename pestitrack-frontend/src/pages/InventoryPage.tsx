@@ -12,6 +12,7 @@ import {
   DialogContent,
   DialogTitle,
   FormControl,
+  IconButton,
   InputLabel,
   MenuItem,
   Pagination,
@@ -26,9 +27,11 @@ import {
   TableRow,
   Tabs,
   TextField,
+  Tooltip,
   Typography,
 } from '@mui/material'
 import AddRoundedIcon from '@mui/icons-material/AddRounded'
+import DeleteOutlineRoundedIcon from '@mui/icons-material/DeleteOutlineRounded'
 import Inventory2RoundedIcon from '@mui/icons-material/Inventory2Rounded'
 import RemoveRoundedIcon from '@mui/icons-material/RemoveRounded'
 import TuneRoundedIcon from '@mui/icons-material/TuneRounded'
@@ -36,6 +39,7 @@ import { useFarm } from '../farms/FarmContext'
 import { ApiError, apiRequest } from '../lib/api'
 import type {
   InventoryBalance,
+  InventoryThreshold,
   InventoryTransaction,
   InventoryTransactionType,
   PagedResponse,
@@ -250,7 +254,9 @@ function transactionColor(
 
 export function InventoryPage() {
   const queryClient = useQueryClient()
-  const { selectedFarmId, selectedFarm } = useFarm()
+  const { selectedFarmId, selectedFarm, hasPermission } = useFarm()
+  const canManage = hasPermission('inventory.manage')
+  const canIssue = hasPermission('inventory.issue')
   const [tab, setTab] = useState(0)
   const [page, setPage] = useState(1)
   const [typeFilter, setTypeFilter] = useState('')
@@ -258,6 +264,10 @@ export function InventoryPage() {
   const [selectedBalance, setSelectedBalance] = useState<InventoryBalance | null>(null)
   const [formOpen, setFormOpen] = useState(false)
   const [formError, setFormError] = useState('')
+  const [thresholdDialogOpen, setThresholdDialogOpen] = useState(false)
+  const [thresholdProductId, setThresholdProductId] = useState('')
+  const [thresholdMinQty, setThresholdMinQty] = useState('')
+  const [thresholdError, setThresholdError] = useState('')
 
   const productsQuery = useQuery({
     queryKey: ['products'],
@@ -268,6 +278,13 @@ export function InventoryPage() {
     queryKey: ['inventory-balances', selectedFarmId],
     queryFn: () =>
       apiRequest<InventoryBalance[]>(`/api/farms/${selectedFarmId}/inventory/balances`),
+    enabled: Boolean(selectedFarmId),
+    retry: false,
+  })
+  const thresholdsQuery = useQuery({
+    queryKey: ['inventory-thresholds', selectedFarmId],
+    queryFn: () =>
+      apiRequest<InventoryThreshold[]>(`/api/farms/${selectedFarmId}/inventory/thresholds`),
     enabled: Boolean(selectedFarmId),
     retry: false,
   })
@@ -304,6 +321,8 @@ export function InventoryPage() {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['inventory-balances', selectedFarmId] }),
         queryClient.invalidateQueries({ queryKey: ['inventory-transactions', selectedFarmId] }),
+        queryClient.invalidateQueries({ queryKey: ['inventory-thresholds', selectedFarmId] }),
+        queryClient.invalidateQueries({ queryKey: ['notifications-summary', selectedFarmId] }),
       ])
       setFormOpen(false)
       setSelectedBalance(null)
@@ -312,6 +331,41 @@ export function InventoryPage() {
       setFormError(
         caught instanceof ApiError ? caught.message : 'Could not record the inventory transaction.',
       ),
+  })
+
+  const saveThresholdMutation = useMutation({
+    mutationFn: () =>
+      apiRequest<InventoryThreshold>(
+        `/api/farms/${selectedFarmId}/inventory/thresholds/${thresholdProductId}`,
+        {
+          method: 'PUT',
+          body: JSON.stringify({ minimumQuantity: Number(thresholdMinQty) }),
+        },
+      ),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['inventory-thresholds', selectedFarmId] }),
+        queryClient.invalidateQueries({ queryKey: ['notifications-summary', selectedFarmId] }),
+      ])
+      setThresholdDialogOpen(false)
+    },
+    onError: (caught) =>
+      setThresholdError(
+        caught instanceof ApiError ? caught.message : 'Could not save low-stock threshold.',
+      ),
+  })
+
+  const deleteThresholdMutation = useMutation({
+    mutationFn: (productId: string) =>
+      apiRequest(`/api/farms/${selectedFarmId}/inventory/thresholds/${productId}`, {
+        method: 'DELETE',
+      }),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['inventory-thresholds', selectedFarmId] }),
+        queryClient.invalidateQueries({ queryKey: ['notifications-summary', selectedFarmId] }),
+      ])
+    },
   })
 
   const openForm = (nextOperation: Operation, balance: InventoryBalance | null = null) => {
@@ -342,27 +396,35 @@ export function InventoryPage() {
             Track pesticide stock for {selectedFarm?.name}.
           </Typography>
         </Box>
-        <Stack direction="row" spacing={1}>
-          <Button
-            variant="contained"
-            startIcon={<AddRoundedIcon />}
-            onClick={() => openForm('receive')}
-          >
-            Receive stock
-          </Button>
-          <Button
-            variant="outlined"
-            startIcon={<TuneRoundedIcon />}
-            onClick={() => openForm('adjustment')}
-          >
-            Adjust
-          </Button>
-        </Stack>
+        {canManage && (
+          <Stack direction="row" spacing={1}>
+            <Button
+              variant="contained"
+              startIcon={<AddRoundedIcon />}
+              onClick={() => openForm('receive')}
+            >
+              Receive stock
+            </Button>
+            <Button
+              variant="outlined"
+              startIcon={<TuneRoundedIcon />}
+              onClick={() => openForm('adjustment')}
+            >
+              Adjust
+            </Button>
+          </Stack>
+        )}
       </Stack>
 
       {pageError && (
         <Alert severity="error">
           {pageError instanceof ApiError ? pageError.message : 'Could not load inventory.'}
+        </Alert>
+      )}
+
+      {(thresholdsQuery.data ?? []).some((t) => t.isLowStock) && (
+        <Alert severity="warning">
+          {(thresholdsQuery.data ?? []).filter((t) => t.isLowStock).length} product(s) are currently below their configured minimum stock threshold.
         </Alert>
       )}
 
@@ -374,6 +436,7 @@ export function InventoryPage() {
         >
           <Tab label="Balances" />
           <Tab label="Transactions" />
+          <Tab label="Low-stock thresholds" />
         </Tabs>
 
         {tab === 0 &&
@@ -420,21 +483,25 @@ export function InventoryPage() {
                       </TableCell>
                       <TableCell align="right">
                         <Stack direction="row" spacing={0.5} sx={{ justifyContent: 'flex-end' }}>
-                          <Button
-                            size="small"
-                            startIcon={<TuneRoundedIcon />}
-                            onClick={() => openForm('adjustment', balance)}
-                          >
-                            Adjust
-                          </Button>
-                          <Button
-                            size="small"
-                            color="warning"
-                            startIcon={<RemoveRoundedIcon />}
-                            onClick={() => openForm('issue', balance)}
-                          >
-                            Issue
-                          </Button>
+                          {canManage && (
+                            <Button
+                              size="small"
+                              startIcon={<TuneRoundedIcon />}
+                              onClick={() => openForm('adjustment', balance)}
+                            >
+                              Adjust
+                            </Button>
+                          )}
+                          {canIssue && (
+                            <Button
+                              size="small"
+                              color="warning"
+                              startIcon={<RemoveRoundedIcon />}
+                              onClick={() => openForm('issue', balance)}
+                            >
+                              Issue
+                            </Button>
+                          )}
                         </Stack>
                       </TableCell>
                     </TableRow>
@@ -527,6 +594,101 @@ export function InventoryPage() {
             )}
           </Box>
         )}
+
+        {tab === 2 && (
+          <Box sx={{ p: 2.5 }}>
+            <Stack
+              direction={{ xs: 'column', sm: 'row' }}
+              sx={{ justifyContent: 'space-between', alignItems: { sm: 'center' }, mb: 2, gap: 1.5 }}
+            >
+              <Typography variant="body2" color="text.secondary">
+                Set per-product minimum stock levels to trigger automatic low-stock notifications.
+              </Typography>
+              {canManage && (
+                <Button
+                  size="small"
+                  variant="contained"
+                  startIcon={<AddRoundedIcon />}
+                  onClick={() => {
+                    const activeProducts = (productsQuery.data ?? []).filter((p) => p.isActive)
+                    setThresholdProductId(activeProducts[0]?.id ?? '')
+                    setThresholdMinQty('')
+                    setThresholdError('')
+                    setThresholdDialogOpen(true)
+                  }}
+                >
+                  Set threshold
+                </Button>
+              )}
+            </Stack>
+            {thresholdsQuery.isLoading ? (
+              <Box sx={{ p: 5, display: 'grid', placeItems: 'center' }}>
+                <CircularProgress />
+              </Box>
+            ) : !thresholdsQuery.data?.length ? (
+              <Alert severity="info">
+                No low-stock thresholds configured for this farm yet.
+              </Alert>
+            ) : (
+              <TableContainer>
+                <Table>
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>Product</TableCell>
+                      <TableCell align="right">On hand</TableCell>
+                      <TableCell align="right">Minimum threshold</TableCell>
+                      <TableCell>Status</TableCell>
+                      {canManage && <TableCell align="right">Actions</TableCell>}
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {thresholdsQuery.data.map((threshold) => (
+                      <TableRow key={threshold.id} hover>
+                        <TableCell sx={{ fontWeight: 700 }}>{threshold.productName}</TableCell>
+                        <TableCell align="right">{threshold.currentQuantityOnHand}</TableCell>
+                        <TableCell align="right">{threshold.minimumQuantity}</TableCell>
+                        <TableCell>
+                          <Chip
+                            size="small"
+                            label={threshold.isLowStock ? 'Low stock' : 'OK'}
+                            color={threshold.isLowStock ? 'warning' : 'success'}
+                          />
+                        </TableCell>
+                        {canManage && (
+                          <TableCell align="right">
+                            <Stack direction="row" spacing={0.5} sx={{ justifyContent: 'flex-end' }}>
+                              <Button
+                                size="small"
+                                onClick={() => {
+                                  setThresholdProductId(threshold.productId)
+                                  setThresholdMinQty(String(threshold.minimumQuantity))
+                                  setThresholdError('')
+                                  setThresholdDialogOpen(true)
+                                }}
+                              >
+                                Edit
+                              </Button>
+                              <Tooltip title="Remove threshold">
+                                <IconButton
+                                  size="small"
+                                  aria-label={`Remove threshold for ${threshold.productName}`}
+                                  onClick={() => deleteThresholdMutation.mutate(threshold.productId)}
+                                  disabled={deleteThresholdMutation.isPending}
+                                >
+                                  <DeleteOutlineRoundedIcon fontSize="small" />
+                                </IconButton>
+                              </Tooltip>
+                            </Stack>
+                          </TableCell>
+                        )}
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            )}
+          </Box>
+        )}
       </Card>
 
       <InventoryForm
@@ -539,6 +701,61 @@ export function InventoryPage() {
         onClose={() => setFormOpen(false)}
         onSave={(payload) => transactionMutation.mutate(payload)}
       />
+
+      <Dialog
+        open={thresholdDialogOpen}
+        onClose={saveThresholdMutation.isPending ? undefined : () => setThresholdDialogOpen(false)}
+        fullWidth
+        maxWidth="xs"
+      >
+        <Box
+          component="form"
+          onSubmit={(event) => {
+            event.preventDefault()
+            saveThresholdMutation.mutate()
+          }}
+        >
+          <DialogTitle>Low-stock threshold</DialogTitle>
+          <DialogContent>
+            <Stack spacing={2.5} sx={{ pt: 1 }}>
+              {thresholdError && <Alert severity="error">{thresholdError}</Alert>}
+              <FormControl fullWidth required>
+                <InputLabel id="threshold-product-label">Product</InputLabel>
+                <Select
+                  labelId="threshold-product-label"
+                  label="Product"
+                  value={thresholdProductId}
+                  onChange={(event) => setThresholdProductId(event.target.value)}
+                >
+                  {(productsQuery.data ?? [])
+                    .filter((p) => p.isActive)
+                    .map((product) => (
+                      <MenuItem key={product.id} value={product.id}>
+                        {product.name}
+                      </MenuItem>
+                    ))}
+                </Select>
+              </FormControl>
+              <TextField
+                label="Minimum quantity"
+                type="number"
+                value={thresholdMinQty}
+                onChange={(event) => setThresholdMinQty(event.target.value)}
+                slotProps={{ htmlInput: { min: 0.001, step: 'any' } }}
+                required
+              />
+            </Stack>
+          </DialogContent>
+          <DialogActions sx={{ p: 3, pt: 1 }}>
+            <Button onClick={() => setThresholdDialogOpen(false)} disabled={saveThresholdMutation.isPending}>
+              Cancel
+            </Button>
+            <Button type="submit" variant="contained" disabled={saveThresholdMutation.isPending}>
+              {saveThresholdMutation.isPending ? 'Saving…' : 'Save threshold'}
+            </Button>
+          </DialogActions>
+        </Box>
+      </Dialog>
     </Stack>
   )
 }

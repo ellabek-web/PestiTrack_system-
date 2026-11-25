@@ -11,8 +11,13 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  Divider,
+  FormControl,
   IconButton,
   InputAdornment,
+  InputLabel,
+  MenuItem,
+  Select,
   Stack,
   Switch,
   Table,
@@ -54,6 +59,14 @@ const emptyProduct: ProductPayload = {
   formulation: null,
   concentration: null,
   hazardClass: null,
+  signalWord: null,
+  registrationExpiryDate: null,
+  preHarvestIntervalDays: null,
+  reEntryIntervalHours: null,
+  maxApplicationRate: null,
+  maxApplicationRateUnit: null,
+  maxWindSpeedMetersPerSecond: null,
+  labelNotes: null,
   description: null,
 }
 
@@ -72,6 +85,14 @@ function ProductForm({ open, product, saving, error, onClose, onSave }: ProductF
             formulation: product.formulation,
             concentration: product.concentration,
             hazardClass: product.hazardClass,
+            signalWord: product.signalWord,
+            registrationExpiryDate: product.registrationExpiryDate,
+            preHarvestIntervalDays: product.preHarvestIntervalDays,
+            reEntryIntervalHours: product.reEntryIntervalHours,
+            maxApplicationRate: product.maxApplicationRate,
+            maxApplicationRateUnit: product.maxApplicationRateUnit,
+            maxWindSpeedMetersPerSecond: product.maxWindSpeedMetersPerSecond,
+            labelNotes: product.labelNotes,
             description: product.description,
           }
         : emptyProduct,
@@ -80,6 +101,19 @@ function ProductForm({ open, product, saving, error, onClose, onSave }: ProductF
 
   const setValue = (key: keyof ProductPayload, value: string) => {
     setValues((current) => ({ ...current, [key]: value || null }))
+  }
+
+  const setNumberValue = (
+    key: 'preHarvestIntervalDays' | 'reEntryIntervalHours' | 'maxApplicationRate' | 'maxWindSpeedMetersPerSecond',
+    value: string,
+    integer = false,
+  ) => {
+    if (!value.trim()) {
+      setValues((current) => ({ ...current, [key]: null }))
+      return
+    }
+    const parsed = integer ? Number.parseInt(value, 10) : Number.parseFloat(value)
+    setValues((current) => ({ ...current, [key]: Number.isNaN(parsed) ? null : parsed }))
   }
 
   const handleSubmit = (event: FormEvent) => {
@@ -93,6 +127,10 @@ function ProductForm({ open, product, saving, error, onClose, onSave }: ProductF
       formulation: values.formulation?.trim() || null,
       concentration: values.concentration?.trim() || null,
       hazardClass: values.hazardClass?.trim() || null,
+      signalWord: values.signalWord?.trim() || null,
+      registrationExpiryDate: values.registrationExpiryDate || null,
+      maxApplicationRateUnit: values.maxApplicationRateUnit?.trim() || null,
+      labelNotes: values.labelNotes?.trim() || null,
       description: values.description?.trim() || null,
     })
   }
@@ -138,6 +176,13 @@ function ProductForm({ open, product, saving, error, onClose, onSave }: ProductF
                 slotProps={{ htmlInput: { maxLength: 100 } }}
               />
               <TextField
+                label="Registration expiry date"
+                type="date"
+                value={values.registrationExpiryDate ?? ''}
+                onChange={(event) => setValue('registrationExpiryDate', event.target.value)}
+                slotProps={{ inputLabel: { shrink: true } }}
+              />
+              <TextField
                 label="Formulation"
                 value={values.formulation ?? ''}
                 onChange={(event) => setValue('formulation', event.target.value)}
@@ -155,14 +200,89 @@ function ProductForm({ open, product, saving, error, onClose, onSave }: ProductF
                 onChange={(event) => setValue('hazardClass', event.target.value)}
                 slotProps={{ htmlInput: { maxLength: 100 } }}
               />
+              <FormControl fullWidth>
+                <InputLabel id="signal-word-label">Signal word</InputLabel>
+                <Select
+                  labelId="signal-word-label"
+                  label="Signal word"
+                  value={values.signalWord ?? ''}
+                  onChange={(event) => setValue('signalWord', event.target.value)}
+                >
+                  <MenuItem value="">None</MenuItem>
+                  <MenuItem value="Caution">Caution</MenuItem>
+                  <MenuItem value="Warning">Warning</MenuItem>
+                  <MenuItem value="Danger">Danger</MenuItem>
+                  <MenuItem value="Danger - Poison">Danger - Poison</MenuItem>
+                </Select>
+              </FormControl>
             </Box>
+
+            <Divider />
+            <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+              Label safety restrictions
+            </Typography>
+            <Box
+              sx={{
+                display: 'grid',
+                gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)' },
+                gap: 2.5,
+              }}
+            >
+              <TextField
+                label="Pre-harvest interval (days)"
+                type="number"
+                value={values.preHarvestIntervalDays ?? ''}
+                onChange={(event) => setNumberValue('preHarvestIntervalDays', event.target.value, true)}
+                slotProps={{ htmlInput: { min: 0, max: 3650, step: 1 } }}
+                helperText="Minimum days between application and harvest"
+              />
+              <TextField
+                label="Re-entry interval (hours)"
+                type="number"
+                value={values.reEntryIntervalHours ?? ''}
+                onChange={(event) => setNumberValue('reEntryIntervalHours', event.target.value, true)}
+                slotProps={{ htmlInput: { min: 0, max: 8760, step: 1 } }}
+                helperText="Restricted entry period after application"
+              />
+              <TextField
+                label="Max application rate"
+                type="number"
+                value={values.maxApplicationRate ?? ''}
+                onChange={(event) => setNumberValue('maxApplicationRate', event.target.value)}
+                slotProps={{ htmlInput: { min: 0.0001, step: 'any' } }}
+              />
+              <TextField
+                label="Max rate unit"
+                value={values.maxApplicationRateUnit ?? ''}
+                onChange={(event) => setValue('maxApplicationRateUnit', event.target.value)}
+                placeholder="e.g. L/ha or kg/ha"
+                slotProps={{ htmlInput: { maxLength: 50 } }}
+              />
+              <TextField
+                label="Max wind speed (m/s)"
+                type="number"
+                value={values.maxWindSpeedMetersPerSecond ?? ''}
+                onChange={(event) => setNumberValue('maxWindSpeedMetersPerSecond', event.target.value)}
+                slotProps={{ htmlInput: { min: 0, max: 100, step: '0.1' } }}
+                helperText="Applications above this wind speed are blocked"
+              />
+            </Box>
+
+            <TextField
+              label="Label safety notes"
+              value={values.labelNotes ?? ''}
+              onChange={(event) => setValue('labelNotes', event.target.value)}
+              slotProps={{ htmlInput: { maxLength: 2000 } }}
+              multiline
+              minRows={2}
+            />
             <TextField
               label="Description"
               value={values.description ?? ''}
               onChange={(event) => setValue('description', event.target.value)}
               slotProps={{ htmlInput: { maxLength: 1000 } }}
               multiline
-              minRows={3}
+              minRows={2}
             />
           </Stack>
         </DialogContent>
@@ -303,8 +423,8 @@ export function ProductsPage() {
                 <TableRow>
                   <TableCell>Product</TableCell>
                   <TableCell>Active ingredient</TableCell>
-                  <TableCell>Manufacturer</TableCell>
                   <TableCell>Registration</TableCell>
+                  <TableCell>Safety intervals & limits</TableCell>
                   <TableCell>Hazard</TableCell>
                   {isAdministrator && <TableCell align="right">Actions</TableCell>}
                 </TableRow>
@@ -317,19 +437,64 @@ export function ProductsPage() {
                         {product.name}
                       </Typography>
                       <Typography variant="caption" color="text.secondary">
-                        {[product.formulation, product.concentration].filter(Boolean).join(' · ') ||
-                          'No formulation details'}
+                        {[product.manufacturer, product.formulation, product.concentration]
+                          .filter(Boolean)
+                          .join(' · ') || 'No formulation details'}
                       </Typography>
                     </TableCell>
                     <TableCell>{product.activeIngredient ?? '—'}</TableCell>
-                    <TableCell>{product.manufacturer ?? '—'}</TableCell>
-                    <TableCell>{product.registrationNumber ?? '—'}</TableCell>
                     <TableCell>
-                      {product.hazardClass ? (
-                        <Chip label={product.hazardClass} size="small" color="warning" />
-                      ) : (
-                        '—'
+                      <Typography variant="body2">{product.registrationNumber ?? '—'}</Typography>
+                      {product.registrationExpiryDate && (
+                        <Typography variant="caption" color="text.secondary">
+                          Exp. {product.registrationExpiryDate}
+                        </Typography>
                       )}
+                    </TableCell>
+                    <TableCell>
+                      <Stack direction="row" spacing={0.5} useFlexGap sx={{ flexWrap: 'wrap' }}>
+                        {product.reEntryIntervalHours != null && (
+                          <Chip size="small" variant="outlined" label={`REI ${product.reEntryIntervalHours}h`} />
+                        )}
+                        {product.preHarvestIntervalDays != null && (
+                          <Chip size="small" variant="outlined" label={`PHI ${product.preHarvestIntervalDays}d`} />
+                        )}
+                        {product.maxApplicationRate != null && (
+                          <Chip
+                            size="small"
+                            variant="outlined"
+                            label={`Max ${product.maxApplicationRate}${product.maxApplicationRateUnit ? ` ${product.maxApplicationRateUnit}` : ''}`}
+                          />
+                        )}
+                        {product.maxWindSpeedMetersPerSecond != null && (
+                          <Chip size="small" variant="outlined" label={`Wind ≤ ${product.maxWindSpeedMetersPerSecond} m/s`} />
+                        )}
+                        {product.reEntryIntervalHours == null &&
+                          product.preHarvestIntervalDays == null &&
+                          product.maxApplicationRate == null &&
+                          product.maxWindSpeedMetersPerSecond == null && '—'}
+                      </Stack>
+                    </TableCell>
+                    <TableCell>
+                      <Stack direction="row" spacing={0.5} useFlexGap sx={{ flexWrap: 'wrap' }}>
+                        {product.signalWord && (
+                          <Chip
+                            label={product.signalWord}
+                            size="small"
+                            color={
+                              product.signalWord.toLowerCase().includes('danger')
+                                ? 'error'
+                                : product.signalWord.toLowerCase().includes('warning')
+                                  ? 'warning'
+                                  : 'info'
+                            }
+                          />
+                        )}
+                        {product.hazardClass && (
+                          <Chip label={product.hazardClass} size="small" variant="outlined" color="warning" />
+                        )}
+                        {!product.signalWord && !product.hazardClass && '—'}
+                      </Stack>
                     </TableCell>
                     {isAdministrator && (
                       <TableCell align="right">

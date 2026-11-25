@@ -69,9 +69,12 @@ public sealed class ReportsController : ControllerBase
             application => application.AreaTreatedHectares,
             cancellationToken);
 
-        var items = await ProjectApplications(query)
-            .OrderByDescending(item => item.ApplicationDateUtc)
-            .ThenByDescending(item => item.Id)
+        var items = await ProjectApplications(
+                query
+                    .OrderByDescending(application =>
+                        application.ApplicationDateUtc)
+                    .ThenByDescending(application =>
+                        application.Id))
             .Skip((request.Page - 1) * request.PageSize)
             .Take(request.PageSize)
             .ToListAsync(cancellationToken);
@@ -131,9 +134,12 @@ public sealed class ReportsController : ControllerBase
                 item => item.Count,
                 cancellationToken);
 
-        var items = await ProjectInventory(query)
-            .OrderByDescending(item => item.CreatedAtUtc)
-            .ThenByDescending(item => item.Id)
+        var items = await ProjectInventory(
+                query
+                    .OrderByDescending(transaction =>
+                        transaction.CreatedAtUtc)
+                    .ThenByDescending(transaction =>
+                        transaction.Id))
             .Skip((request.Page - 1) * request.PageSize)
             .Take(request.PageSize)
             .ToListAsync(cancellationToken);
@@ -345,8 +351,12 @@ public sealed class ReportsController : ControllerBase
         var query = ApplyApplicationFilters(
             farmId,
             request);
-        var items = await ProjectApplications(query)
-            .OrderByDescending(item => item.ApplicationDateUtc)
+        var items = await ProjectApplications(
+                query
+                    .OrderByDescending(application =>
+                        application.ApplicationDateUtc)
+                    .ThenByDescending(application =>
+                        application.Id))
             .Take(MaximumExportRows + 1)
             .ToListAsync(cancellationToken);
 
@@ -406,8 +416,11 @@ public sealed class ReportsController : ControllerBase
             return NotFound(new { message = "Active farm not found." });
 
         var items = await ProjectInventory(
-                ApplyInventoryFilters(farmId, request))
-            .OrderByDescending(item => item.CreatedAtUtc)
+                ApplyInventoryFilters(farmId, request)
+                    .OrderByDescending(transaction =>
+                        transaction.CreatedAtUtc)
+                    .ThenByDescending(transaction =>
+                        transaction.Id))
             .Take(MaximumExportRows + 1)
             .ToListAsync(cancellationToken);
 
@@ -731,9 +744,11 @@ public sealed class ReportsController : ControllerBase
         CancellationToken cancellationToken)
     {
         var items = await ProjectApplications(
-                ApplyApplicationFilters(farmId, request))
-            .OrderByDescending(item =>
-                item.ApplicationDateUtc)
+                ApplyApplicationFilters(farmId, request)
+                    .OrderByDescending(application =>
+                        application.ApplicationDateUtc)
+                    .ThenByDescending(application =>
+                        application.Id))
             .Take(MaximumExportRows + 1)
             .ToListAsync(cancellationToken);
 
@@ -783,8 +798,11 @@ public sealed class ReportsController : ControllerBase
         CancellationToken cancellationToken)
     {
         var items = await ProjectInventory(
-                ApplyInventoryFilters(farmId, request))
-            .OrderByDescending(item => item.CreatedAtUtc)
+                ApplyInventoryFilters(farmId, request)
+                    .OrderByDescending(transaction =>
+                        transaction.CreatedAtUtc)
+                    .ThenByDescending(transaction =>
+                        transaction.Id))
             .Take(MaximumExportRows + 1)
             .ToListAsync(cancellationToken);
 

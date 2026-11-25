@@ -12,8 +12,12 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  FormControl,
   FormControlLabel,
   IconButton,
+  InputLabel,
+  MenuItem,
+  Select,
   Stack,
   Switch,
   Tab,
@@ -34,7 +38,7 @@ import EditRoundedIcon from '@mui/icons-material/EditRounded'
 import GroupRoundedIcon from '@mui/icons-material/GroupRounded'
 import { useFarm } from '../farms/FarmContext'
 import { ApiError, apiRequest } from '../lib/api'
-import type { FarmRole, FarmUser } from '../types/api'
+import type { FarmRole, FarmUser, ManagedUser, PagedResponse } from '../types/api'
 
 /* oxlint-disable react/set-state-in-effect -- dialog forms reset from selected records */
 
@@ -115,9 +119,19 @@ const permissionGroups: { name: string; permissions: PermissionOption[] }[] = [
         label: 'Manage farm users',
         description: 'Manage assignments and roles.',
       },
-      { code: 'reports.view', label: 'View reports', description: 'Reserved for reports.' },
-      { code: 'reports.export', label: 'Export reports', description: 'Reserved for exports.' },
-      { code: 'audit.view', label: 'View audit trail', description: 'Reserved for audit records.' },
+      { code: 'reports.view', label: 'View reports', description: 'View farm reports.' },
+      { code: 'reports.export', label: 'Export reports', description: 'Export reports to CSV, Excel, and PDF.' },
+      {
+        code: 'compliance.view',
+        label: 'View safety & compliance',
+        description: 'View certification monitoring, safety intervals, and compliance records.',
+      },
+      {
+        code: 'compliance.manage',
+        label: 'Manage safety & compliance',
+        description: 'Create and update compliance records and corrective actions.',
+      },
+      { code: 'audit.view', label: 'View audit trail', description: 'View farm audit records.' },
     ],
   },
 ]
@@ -243,6 +257,7 @@ interface UserFormProps {
   open: boolean
   assignment: FarmUser | null
   roles: FarmRole[]
+  accounts: ManagedUser[]
   saving: boolean
   error: string
   onClose: () => void
@@ -253,6 +268,7 @@ function UserForm({
   open,
   assignment,
   roles,
+  accounts,
   saving,
   error,
   onClose,
@@ -296,26 +312,22 @@ function UserForm({
                 Updating roles for {assignment.displayName} ({assignment.email ?? assignment.userId})
               </Alert>
             ) : (
-              <>
-                <Alert severity="info">
-                  The backend does not provide user search yet. Enter the Identity user ID.
-                </Alert>
-                <TextField
-                  label="User ID"
+              <FormControl required>
+                <InputLabel id="farm-user-account-label">Account</InputLabel>
+                <Select
+                  labelId="farm-user-account-label"
+                  label="Account"
                   value={userId}
                   onChange={(event) => setUserId(event.target.value)}
-                  placeholder="00000000-0000-0000-0000-000000000000"
-                  slotProps={{
-                    htmlInput: {
-                      minLength: 36,
-                      maxLength: 36,
-                      pattern: '[0-9a-fA-F-]{36}',
-                    },
-                  }}
-                  required
                   autoFocus
-                />
-              </>
+                >
+                  {accounts.map((account) => (
+                    <MenuItem key={account.id} value={account.id}>
+                      {account.displayName} · {account.email}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
             )}
             <Box>
               <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 1 }}>
@@ -387,6 +399,14 @@ export function AdministrationPage() {
     queryKey: usersKey,
     queryFn: () => apiRequest<FarmUser[]>(`/api/farms/${selectedFarmId}/users`),
     enabled: Boolean(selectedFarmId),
+    retry: false,
+  })
+  const accountsQuery = useQuery({
+    queryKey: ['managed-users', 'farm-assignment-options'],
+    queryFn: () =>
+      apiRequest<PagedResponse<ManagedUser>>(
+        '/api/admin/users?isActive=true&pageSize=100',
+      ),
     retry: false,
   })
 
@@ -461,7 +481,11 @@ export function AdministrationPage() {
     return <Alert severity="info">Select a farm to manage roles and user assignments.</Alert>
   }
 
-  const pageError = rolesQuery.error ?? usersQuery.error ?? statusMutation.error
+  const pageError =
+    rolesQuery.error ??
+    usersQuery.error ??
+    accountsQuery.error ??
+    statusMutation.error
 
   return (
     <Stack spacing={3}>
@@ -669,6 +693,7 @@ export function AdministrationPage() {
         open={userOpen}
         assignment={editingUser}
         roles={rolesQuery.data ?? []}
+        accounts={accountsQuery.data?.items ?? []}
         saving={userMutation.isPending}
         error={userError}
         onClose={() => setUserOpen(false)}

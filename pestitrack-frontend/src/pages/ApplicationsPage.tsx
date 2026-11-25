@@ -32,9 +32,12 @@ import AppsRoundedIcon from '@mui/icons-material/AppsRounded'
 import CheckCircleRoundedIcon from '@mui/icons-material/CheckCircleRounded'
 import DeleteOutlineRoundedIcon from '@mui/icons-material/DeleteOutlineRounded'
 import EditRoundedIcon from '@mui/icons-material/EditRounded'
+import VisibilityRoundedIcon from '@mui/icons-material/VisibilityRounded'
+import { ApplicationDetailDialog } from '../components/ApplicationDetailDialog'
 import { useFarm } from '../farms/FarmContext'
 import { ApiError, apiRequest } from '../lib/api'
 import type {
+  ApplicationSafetyCheck,
   Field,
   FieldCrop,
   InventoryBalance,
@@ -528,6 +531,7 @@ function ApplicationForm({
 }
 
 interface CompleteDialogProps {
+  farmId: string | null
   application: PesticideApplication | null
   balances: InventoryBalance[]
   completing: boolean
@@ -537,6 +541,7 @@ interface CompleteDialogProps {
 }
 
 function CompleteDialog({
+  farmId,
   application,
   balances,
   completing,
@@ -544,6 +549,16 @@ function CompleteDialog({
   onClose,
   onComplete,
 }: CompleteDialogProps) {
+  const safetyQuery = useQuery({
+    queryKey: ['application-safety-check', farmId, application?.id],
+    queryFn: () =>
+      apiRequest<ApplicationSafetyCheck>(
+        `/api/farms/${farmId}/applications/${application?.id}/safety-check`,
+      ),
+    enabled: Boolean(farmId && application?.id),
+    retry: false,
+  })
+
   const checks =
     application?.products.map((line) => {
       const available =
@@ -554,7 +569,11 @@ function CompleteDialog({
         )?.quantityOnHand ?? 0
       return { line, available, sufficient: available >= line.quantityUsed }
     }) ?? []
-  const canComplete = checks.length > 0 && checks.every((check) => check.sufficient)
+  const hasSafetyViolations = Boolean(safetyQuery.data && !safetyQuery.data.isCompliant)
+  const canComplete =
+    checks.length > 0 &&
+    checks.every((check) => check.sufficient) &&
+    !hasSafetyViolations
 
   return (
     <Dialog open={Boolean(application)} onClose={completing ? undefined : onClose} fullWidth maxWidth="sm">
@@ -565,6 +584,39 @@ function CompleteDialog({
           <Alert severity="warning">
             Completion permanently issues inventory and the application can no longer be edited.
           </Alert>
+          {safetyQuery.data && (
+            <Stack spacing={1}>
+              {!safetyQuery.data.isCompliant && (
+                <Alert severity="error">
+                  Safety check found {safetyQuery.data.violationCount} violation(s). Resolve them before completing.
+                </Alert>
+              )}
+              {safetyQuery.data.checks
+                .filter((item) => item.severity !== 'Pass')
+                .map((item, idx) => (
+                  <Alert
+                    key={`${item.code}-${idx}`}
+                    severity={item.severity === 'Violation' ? 'error' : 'warning'}
+                    sx={{ py: 0.5 }}
+                  >
+                    <strong>{item.title}:</strong> {item.message}
+                  </Alert>
+                ))}
+              {(safetyQuery.data.reEntryAllowedAtUtc || safetyQuery.data.earliestSafeHarvestDate) && (
+                <Alert severity="info" sx={{ py: 0.5 }}>
+                  {safetyQuery.data.reEntryAllowedAtUtc && (
+                    <span>
+                      REI until {new Date(safetyQuery.data.reEntryAllowedAtUtc).toLocaleString()}
+                    </span>
+                  )}
+                  {safetyQuery.data.reEntryAllowedAtUtc && safetyQuery.data.earliestSafeHarvestDate && ' · '}
+                  {safetyQuery.data.earliestSafeHarvestDate && (
+                    <span>Earliest safe harvest: {safetyQuery.data.earliestSafeHarvestDate}</span>
+                  )}
+                </Alert>
+              )}
+            </Stack>
+          )}
           {checks.map(({ line, available, sufficient }) => (
             <Stack
               key={line.id}
@@ -607,7 +659,9 @@ function CompleteDialog({
 
 export function ApplicationsPage() {
   const queryClient = useQueryClient()
-  const { selectedFarmId, selectedFarm } = useFarm()
+  const { selectedFarmId, selectedFarm, hasPermission } = useFarm()
+  const canCreate = hasPermission('applications.create')
+  const canComplete = hasPermission('applications.approve') && hasPermission('inventory.issue')
   const [formOpen, setFormOpen] = useState(false)
   const [editingApplication, setEditingApplication] =
     useState<PesticideApplication | null>(null)
@@ -615,6 +669,7 @@ export function ApplicationsPage() {
   const [completingApplication, setCompletingApplication] =
     useState<PesticideApplication | null>(null)
   const [completionError, setCompletionError] = useState('')
+  const [viewingApplicationId, setViewingApplicationId] = useState<string | null>(null)
   const queryKey = ['applications', selectedFarmId]
 
   const applicationsQuery = useQuery({
@@ -627,32 +682,33 @@ export function ApplicationsPage() {
   const fieldsQuery = useQuery({
     queryKey: ['fields', selectedFarmId],
     queryFn: () => apiRequest<Field[]>(`/api/farms/${selectedFarmId}/fields`),
-    enabled: Boolean(selectedFarmId),
+    enabled: Boolean(selectedFarmId) && canCreate && hasPermission('fields.view'),
     retry: false,
   })
   const workersQuery = useQuery({
     queryKey: ['workers', selectedFarmId],
     queryFn: () => apiRequest<Worker[]>(`/api/farms/${selectedFarmId}/workers`),
-    enabled: Boolean(selectedFarmId),
+    enabled: Boolean(selectedFarmId) && canCreate && hasPermission('workers.view'),
     retry: false,
   })
   const productsQuery = useQuery({
     queryKey: ['products'],
     queryFn: () => apiRequest<Product[]>('/api/products'),
+    enabled: canCreate,
     retry: false,
   })
   const balancesQuery = useQuery({
     queryKey: ['inventory-balances', selectedFarmId],
     queryFn: () =>
       apiRequest<InventoryBalance[]>(`/api/farms/${selectedFarmId}/inventory/balances`),
-    enabled: Boolean(selectedFarmId),
+    enabled: Boolean(selectedFarmId) && (canCreate || canComplete) && hasPermission('inventory.view'),
     retry: false,
   })
   const weatherQuery = useQuery({
     queryKey: ['weather', selectedFarmId, '', '', ''],
     queryFn: () =>
       apiRequest<WeatherRecord[]>(`/api/farms/${selectedFarmId}/weather-records`),
-    enabled: Boolean(selectedFarmId),
+    enabled: Boolean(selectedFarmId) && canCreate && hasPermission('weather.view'),
     retry: false,
   })
 
@@ -735,9 +791,11 @@ export function ApplicationsPage() {
             Plan, review, and complete treatments for {selectedFarm?.name}.
           </Typography>
         </Box>
-        <Button variant="contained" startIcon={<AddRoundedIcon />} onClick={() => openForm(null)}>
-          New application
-        </Button>
+        {canCreate && (
+          <Button variant="contained" startIcon={<AddRoundedIcon />} onClick={() => openForm(null)}>
+            New application
+          </Button>
+        )}
       </Stack>
 
       {pageError && (
@@ -811,25 +869,37 @@ export function ApplicationsPage() {
                       />
                     </TableCell>
                     <TableCell align="right">
+                      <Tooltip title="View details">
+                        <IconButton
+                          onClick={() => setViewingApplicationId(application.id)}
+                          aria-label="View application details"
+                        >
+                          <VisibilityRoundedIcon />
+                        </IconButton>
+                      </Tooltip>
                       {application.status === 'Draft' && (
                         <>
-                          <Tooltip title="Edit draft">
-                            <IconButton
-                              onClick={() => openForm(application)}
-                              aria-label="Edit draft application"
-                            >
-                              <EditRoundedIcon />
-                            </IconButton>
-                          </Tooltip>
-                          <Tooltip title="Complete application">
-                            <IconButton
-                              color="success"
-                              onClick={() => openCompletion(application)}
-                              aria-label="Complete application"
-                            >
-                              <CheckCircleRoundedIcon />
-                            </IconButton>
-                          </Tooltip>
+                          {canCreate && (
+                            <Tooltip title="Edit draft">
+                              <IconButton
+                                onClick={() => openForm(application)}
+                                aria-label="Edit draft application"
+                              >
+                                <EditRoundedIcon />
+                              </IconButton>
+                            </Tooltip>
+                          )}
+                          {canComplete && (
+                            <Tooltip title="Complete application">
+                              <IconButton
+                                color="success"
+                                onClick={() => openCompletion(application)}
+                                aria-label="Complete application"
+                              >
+                                <CheckCircleRoundedIcon />
+                              </IconButton>
+                            </Tooltip>
+                          )}
                         </>
                       )}
                     </TableCell>
@@ -856,6 +926,7 @@ export function ApplicationsPage() {
         onSave={(payload) => saveMutation.mutate(payload)}
       />
       <CompleteDialog
+        farmId={selectedFarmId}
         application={completingApplication}
         balances={balancesQuery.data ?? []}
         completing={completeMutation.isPending}
@@ -864,6 +935,11 @@ export function ApplicationsPage() {
         onComplete={() => {
           if (completingApplication) completeMutation.mutate(completingApplication)
         }}
+      />
+      <ApplicationDetailDialog
+        farmId={selectedFarmId}
+        applicationId={viewingApplicationId}
+        onClose={() => setViewingApplicationId(null)}
       />
     </Stack>
   )

@@ -175,7 +175,8 @@ function WorkerForm({ open, worker, saving, error, onClose, onSave }: WorkerForm
 
 export function WorkersPage() {
   const queryClient = useQueryClient()
-  const { selectedFarmId, selectedFarm } = useFarm()
+  const { selectedFarmId, selectedFarm, hasPermission } = useFarm()
+  const canManage = hasPermission('workers.manage')
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editingWorker, setEditingWorker] = useState<Worker | null>(null)
   const [formError, setFormError] = useState('')
@@ -241,9 +242,11 @@ export function WorkersPage() {
             Manage workers and applicator certifications for {selectedFarm?.name}.
           </Typography>
         </Box>
-        <Button variant="contained" startIcon={<AddRoundedIcon />} onClick={() => openForm(null)}>
-          Add worker
-        </Button>
+        {canManage && (
+          <Button variant="contained" startIcon={<AddRoundedIcon />} onClick={() => openForm(null)}>
+            Add worker
+          </Button>
+        )}
       </Stack>
 
       {(error || statusMutation.error) && (
@@ -337,7 +340,7 @@ export function WorkersPage() {
                             size="small"
                             checked={worker.isActive}
                             onChange={() => statusMutation.mutate(worker)}
-                            disabled={statusMutation.isPending}
+                            disabled={!canManage || statusMutation.isPending}
                             slotProps={{
                               input: { 'aria-label': `Toggle ${worker.fullName} status` },
                             }}
@@ -348,14 +351,16 @@ export function WorkersPage() {
                         </Stack>
                       </TableCell>
                       <TableCell align="right">
-                        <Tooltip title="Edit worker">
-                          <IconButton
-                            onClick={() => openForm(worker)}
-                            aria-label={`Edit ${worker.fullName}`}
-                          >
-                            <EditRoundedIcon />
-                          </IconButton>
-                        </Tooltip>
+                        {canManage && (
+                          <Tooltip title="Edit worker">
+                            <IconButton
+                              onClick={() => openForm(worker)}
+                              aria-label={`Edit ${worker.fullName}`}
+                            >
+                              <EditRoundedIcon />
+                            </IconButton>
+                          </Tooltip>
+                        )}
                       </TableCell>
                     </TableRow>
                   )

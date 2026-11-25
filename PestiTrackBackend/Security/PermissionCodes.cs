@@ -46,4 +46,8 @@ public static class PermissionCodes
 
     // Audit
     public const string AuditView = "audit.view";
+
+    // Compliance
+    public const string ComplianceView = "compliance.view";
+    public const string ComplianceManage = "compliance.manage";
 }

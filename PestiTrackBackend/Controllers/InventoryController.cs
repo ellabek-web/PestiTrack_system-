@@ -69,6 +69,164 @@ public sealed class InventoryController : ControllerBase
         return Ok(balances);
     }
 
+    // GET: api/farms/{farmId}/inventory/thresholds
+    [HttpGet("thresholds")]
+    [FarmPermission("inventory.view")]
+    public async Task<ActionResult<IReadOnlyList<InventoryThresholdResponse>>> GetThresholds(
+        Guid farmId,
+        CancellationToken cancellationToken)
+    {
+        var farmExists = await _db.Farms
+            .AsNoTracking()
+            .AnyAsync(f => f.Id == farmId && f.IsActive, cancellationToken);
+
+        if (!farmExists)
+            return NotFound(new { message = "Farm not found or inactive." });
+
+        var totals = await _db.InventoryTransactions
+            .AsNoTracking()
+            .Where(t => t.FarmId == farmId)
+            .GroupBy(t => t.ProductId)
+            .Select(g => new
+            {
+                ProductId = g.Key,
+                QuantityOnHand = g.Sum(t =>
+                    t.TransactionType == InventoryTransactionType.StockIn ||
+                    t.TransactionType == InventoryTransactionType.AdjustmentIn
+                        ? t.Quantity
+                        : -t.Quantity)
+            })
+            .ToDictionaryAsync(x => x.ProductId, x => x.QuantityOnHand, cancellationToken);
+
+        var rows = await _db.InventoryThresholds
+            .AsNoTracking()
+            .Where(t => t.FarmId == farmId)
+            .OrderBy(t => t.Product.Name)
+            .Select(t => new
+            {
+                t.Id,
+                t.FarmId,
+                t.ProductId,
+                ProductName = t.Product.Name,
+                t.MinimumQuantity,
+                t.UpdatedAtUtc
+            })
+            .ToListAsync(cancellationToken);
+
+        var items = rows.Select(r =>
+        {
+            var current = totals.GetValueOrDefault(r.ProductId, 0m);
+            return new InventoryThresholdResponse
+            {
+                Id = r.Id,
+                FarmId = r.FarmId,
+                ProductId = r.ProductId,
+                ProductName = r.ProductName,
+                MinimumQuantity = r.MinimumQuantity,
+                CurrentQuantityOnHand = current,
+                IsLowStock = current < r.MinimumQuantity,
+                UpdatedAtUtc = new DateTimeOffset(DateTime.SpecifyKind(r.UpdatedAtUtc, DateTimeKind.Utc))
+            };
+        }).ToList();
+
+        return Ok(items);
+    }
+
+    // PUT: api/farms/{farmId}/inventory/thresholds/{productId}
+    [HttpPut("thresholds/{productId:guid}")]
+    [FarmPermission("inventory.manage")]
+    public async Task<ActionResult<InventoryThresholdResponse>> UpsertThreshold(
+        Guid farmId,
+        Guid productId,
+        [FromBody] UpsertInventoryThresholdRequest request,
+        CancellationToken cancellationToken)
+    {
+        var farmExists = await _db.Farms
+            .AsNoTracking()
+            .AnyAsync(f => f.Id == farmId && f.IsActive, cancellationToken);
+
+        if (!farmExists)
+            return NotFound(new { message = "Farm not found or inactive." });
+
+        var product = await _db.Products
+            .AsNoTracking()
+            .FirstOrDefaultAsync(p => p.Id == productId && p.IsActive, cancellationToken);
+
+        if (product is null)
+            return NotFound(new { message = "Active product not found." });
+
+        var threshold = await _db.InventoryThresholds
+            .FirstOrDefaultAsync(
+                t => t.FarmId == farmId && t.ProductId == productId,
+                cancellationToken);
+
+        var nowUtc = DateTime.UtcNow;
+
+        if (threshold is null)
+        {
+            threshold = new InventoryThreshold
+            {
+                Id = Guid.NewGuid(),
+                FarmId = farmId,
+                ProductId = productId,
+                MinimumQuantity = request.MinimumQuantity,
+                UpdatedAtUtc = nowUtc
+            };
+            _db.InventoryThresholds.Add(threshold);
+        }
+        else
+        {
+            threshold.MinimumQuantity = request.MinimumQuantity;
+            threshold.UpdatedAtUtc = nowUtc;
+        }
+
+        await _db.SaveChangesAsync(cancellationToken);
+
+        var onHand = await _db.InventoryTransactions
+            .AsNoTracking()
+            .Where(t => t.FarmId == farmId && t.ProductId == productId)
+            .SumAsync(
+                t => t.TransactionType == InventoryTransactionType.StockIn ||
+                     t.TransactionType == InventoryTransactionType.AdjustmentIn
+                    ? t.Quantity
+                    : -t.Quantity,
+                cancellationToken);
+
+        return Ok(new InventoryThresholdResponse
+        {
+            Id = threshold.Id,
+            FarmId = threshold.FarmId,
+            ProductId = threshold.ProductId,
+            ProductName = product.Name,
+            MinimumQuantity = threshold.MinimumQuantity,
+            CurrentQuantityOnHand = onHand,
+            IsLowStock = onHand < threshold.MinimumQuantity,
+            UpdatedAtUtc = new DateTimeOffset(DateTime.SpecifyKind(threshold.UpdatedAtUtc, DateTimeKind.Utc))
+        });
+    }
+
+    // DELETE: api/farms/{farmId}/inventory/thresholds/{productId}
+    [HttpDelete("thresholds/{productId:guid}")]
+    [FarmPermission("inventory.manage")]
+    public async Task<IActionResult> DeleteThreshold(
+        Guid farmId,
+        Guid productId,
+        CancellationToken cancellationToken)
+    {
+        var threshold = await _db.InventoryThresholds
+            .FirstOrDefaultAsync(
+                t => t.FarmId == farmId && t.ProductId == productId,
+                cancellationToken);
+
+        if (threshold is null)
+            return NotFound(new { message = "Inventory threshold not found." });
+
+        _db.InventoryThresholds.Remove(threshold);
+        await _db.SaveChangesAsync(cancellationToken);
+
+        return NoContent();
+    }
+
     // GET: api/farms/{farmId}/inventory/transactions
     [HttpGet("transactions")]
     [FarmPermission("inventory.view")]

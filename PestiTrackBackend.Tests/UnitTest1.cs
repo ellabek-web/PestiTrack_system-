@@ -11,6 +11,7 @@ using PestiTrackBackend.Models.Inventory;
 using PestiTrackBackend.Models.Products;
 using PestiTrackBackend.Models.Weather;
 using PestiTrackBackend.Models.Workers;
+using PestiTrackBackend.Security;
 using PestiTrackBackend.Services.Authorization;
 
 namespace PestiTrackBackend.Tests;
@@ -369,6 +370,15 @@ public sealed class PesticideApplicationHistoryTests
             CancellationToken cancellationToken = default)
         {
             return Task.FromResult(true);
+        }
+
+        public Task<IReadOnlyList<string>> GetPermissionsAsync(
+            Guid userId,
+            Guid farmId,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult<IReadOnlyList<string>>(
+                PermissionSeedData.All.Select(p => p.Code).ToList());
         }
     }
 }

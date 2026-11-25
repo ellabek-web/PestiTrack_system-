@@ -1,8 +1,13 @@
 
+using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using PestiTrackBackend.Data;
+using PestiTrackBackend.Health;
 using PestiTrackBackend.Models.Identity;
 using PestiTrackBackend.Security.Bootstrap;
 using Microsoft.AspNetCore.Antiforgery;
@@ -11,10 +16,32 @@ using Microsoft.OpenApi;
 using PestiTrackBackend.Swagger;
 using PestiTrackBackend.Services.Authorization;
 using PestiTrackBackend.Security.Authorization;
+using PestiTrackBackend.Security.Middleware;
+using PestiTrackBackend.Security.RateLimiting;
 using Microsoft.AspNetCore.Authorization;
 using PestiTrackBackend.Services.Auditing;
+using PestiTrackBackend.Services.Notifications;
+using PestiTrackBackend.Services.Weather;
 
 
+
+if (args.Contains("--healthcheck", StringComparer.OrdinalIgnoreCase))
+{
+    var probeUrl = Environment.GetEnvironmentVariable("HEALTHCHECK_URL")
+        ?? "http://127.0.0.1:8080/health/live";
+    try
+    {
+        using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(4) };
+        using var response = await client.GetAsync(probeUrl);
+        Environment.ExitCode = response.IsSuccessStatusCode ? 0 : 1;
+    }
+    catch
+    {
+        Environment.ExitCode = 1;
+    }
+
+    return;
+}
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -119,6 +146,14 @@ builder.Services.AddScoped<
     IFarmAuthorizationService,
     FarmAuthorizationService>();
 
+builder.Services.AddHttpClient(OpenMeteoWeatherProvider.HttpClientName, client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(15);
+    client.DefaultRequestHeaders.UserAgent.ParseAdd("PestiTrack/1.0");
+});
+builder.Services.AddScoped<IExternalWeatherProvider, OpenMeteoWeatherProvider>();
+builder.Services.AddScoped<IFarmNotificationService, FarmNotificationService>();
+
 // Register the dynamic farm permission policy provider.
 builder.Services.AddSingleton<
     IAuthorizationPolicyProvider,
@@ -147,6 +182,113 @@ builder.Services.AddAntiforgery(options =>
 // Register administrator provisioning service.
 builder.Services.AddScoped<AdminBootstrapper>();
 
+// Configure global exception handling and RFC 7807 ProblemDetails.
+builder.Services.AddProblemDetails();
+builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
+
+// Configure reverse-proxy forwarded headers.
+var trustForwardedHeaders = builder.Configuration.GetValue("ReverseProxy:TrustForwardedHeaders", false);
+var terminateTlsExternally = builder.Configuration.GetValue("ReverseProxy:TerminateTlsExternally", false);
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders =
+        ForwardedHeaders.XForwardedFor |
+        ForwardedHeaders.XForwardedProto;
+
+    if (trustForwardedHeaders)
+    {
+        options.KnownIPNetworks.Clear();
+        options.KnownProxies.Clear();
+    }
+});
+
+// Configure optional trusted CORS origins when frontend is hosted on a separate origin.
+var allowedOrigins = builder.Configuration
+    .GetSection("Cors:AllowedOrigins")
+    .Get<string[]>()
+    ?.Where(origin => !string.IsNullOrWhiteSpace(origin))
+    .ToArray() ?? [];
+
+if (allowedOrigins.Length > 0)
+{
+    builder.Services.AddCors(options =>
+    {
+        options.AddPolicy("TrustedOrigins", policy =>
+        {
+            policy.WithOrigins(allowedOrigins)
+                .AllowAnyHeader()
+                .AllowAnyMethod()
+                .AllowCredentials();
+        });
+    });
+}
+
+// Configure rate limiting (strict auth policy + global per-IP protection).
+var globalLimit = Math.Max(
+    20,
+    builder.Configuration.GetValue("RateLimiting:GlobalPermitLimitPerMinute", 200));
+var authLimit = Math.Max(
+    3,
+    builder.Configuration.GetValue("RateLimiting:AuthPermitLimitPerMinute", 10));
+
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.OnRejected = async (context, cancellationToken) =>
+    {
+        var retryAfterSeconds = 60;
+        if (context.Lease.TryGetMetadata(MetadataName.RetryAfter, out var retryAfter))
+        {
+            retryAfterSeconds = Math.Max(1, (int)Math.Ceiling(retryAfter.TotalSeconds));
+        }
+
+        context.HttpContext.Response.Headers.RetryAfter = retryAfterSeconds.ToString();
+        context.HttpContext.Response.ContentType = "application/json";
+        await context.HttpContext.Response.WriteAsJsonAsync(
+            new
+            {
+                message = "Too many requests. Please wait a moment and try again.",
+                retryAfterSeconds
+            },
+            cancellationToken);
+    };
+
+    options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(context =>
+    {
+        if (context.Request.Path.StartsWithSegments("/health", StringComparison.OrdinalIgnoreCase))
+        {
+            return RateLimitPartition.GetNoLimiter("health");
+        }
+
+        var ip = context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        return RateLimitPartition.GetFixedWindowLimiter(
+            $"global:{ip}",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = globalLimit,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0
+            });
+    });
+
+    options.AddPolicy(RateLimitPolicies.Auth, context =>
+    {
+        var ip = context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        return RateLimitPartition.GetFixedWindowLimiter(
+            $"auth:{ip}",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = authLimit,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0
+            });
+    });
+});
+
+// Configure liveness and readiness health checks.
+builder.Services.AddHealthChecks()
+    .AddCheck<DatabaseHealthCheck>("database", tags: ["ready"]);
+
 // Register controllers and OpenAPI.
 // Register MVC services with automatic antiforgery validation.
 builder.Services.AddControllersWithViews(options =>
@@ -169,6 +311,18 @@ builder.Services.AddSwaggerGen(options =>
 
 var app = builder.Build();
 
+// Handle explicit EF Core database migration command for containers / CI.
+if (args.Contains(
+    "--migrate",
+    StringComparer.OrdinalIgnoreCase))
+{
+    await using var scope = app.Services.CreateAsyncScope();
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    await db.Database.MigrateAsync();
+    Console.WriteLine("Database migrations applied successfully.");
+    return;
+}
+
 // Handle one-time administrator provisioning.
 if (args.Contains(
     "--bootstrap-admin",
@@ -185,6 +339,10 @@ if (args.Contains(
     return;
 }
 
+app.UseForwardedHeaders();
+app.UseExceptionHandler();
+app.UseMiddleware<SecurityHeadersMiddleware>();
+
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
@@ -196,12 +354,60 @@ if (app.Environment.IsDevelopment())
             "PestiTrack API v1");
     });
 }
+else
+{
+    app.UseHsts();
+}
 
-app.UseHttpsRedirection();
+if (!terminateTlsExternally)
+{
+    app.UseHttpsRedirection();
+}
+
+if (allowedOrigins.Length > 0)
+{
+    app.UseCors("TrustedOrigins");
+}
+
+app.UseRateLimiter();
 
 // Authentication must run before authorization.
 app.UseAuthentication();
 app.UseAuthorization();
+
+app.MapHealthChecks("/health/live", new HealthCheckOptions
+{
+    Predicate = _ => false,
+    ResponseWriter = async (context, report) =>
+    {
+        context.Response.ContentType = "application/json";
+        await context.Response.WriteAsJsonAsync(new
+        {
+            status = report.Status.ToString(),
+            timestampUtc = DateTimeOffset.UtcNow
+        });
+    }
+});
+
+app.MapHealthChecks("/health/ready", new HealthCheckOptions
+{
+    Predicate = check => check.Tags.Contains("ready"),
+    ResponseWriter = async (context, report) =>
+    {
+        context.Response.ContentType = "application/json";
+        await context.Response.WriteAsJsonAsync(new
+        {
+            status = report.Status.ToString(),
+            timestampUtc = DateTimeOffset.UtcNow,
+            checks = report.Entries.Select(entry => new
+            {
+                name = entry.Key,
+                status = entry.Value.Status.ToString(),
+                description = entry.Value.Description
+            })
+        });
+    }
+});
 
 app.MapControllers();
 

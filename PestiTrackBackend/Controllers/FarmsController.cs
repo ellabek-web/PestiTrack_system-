@@ -7,6 +7,7 @@ using PestiTrackBackend.DTOs.Farms;
 using PestiTrackBackend.Models.Farms;
 using PestiTrackBackend.Security;
 using PestiTrackBackend.Security.Authorization;
+using PestiTrackBackend.Services.Authorization;
 
 namespace PestiTrackBackend.Controllers;
 
@@ -16,10 +17,14 @@ namespace PestiTrackBackend.Controllers;
 public sealed class FarmsController : ControllerBase
 {
     private readonly AppDbContext _db;
+    private readonly IFarmAuthorizationService _farmAuthorizationService;
 
-    public FarmsController(AppDbContext db)
+    public FarmsController(
+        AppDbContext db,
+        IFarmAuthorizationService farmAuthorizationService)
     {
         _db = db;
+        _farmAuthorizationService = farmAuthorizationService;
     }
 
     // GET: api/farms
@@ -63,6 +68,8 @@ public sealed class FarmsController : ControllerBase
                 Name = farm.Name,
                 Code = farm.Code,
                 Location = farm.Location,
+                Latitude = farm.Latitude,
+                Longitude = farm.Longitude,
                 IsActive = farm.IsActive,
                 CreatedAtUtc = farm.CreatedAtUtc
             })
@@ -89,6 +96,8 @@ public sealed class FarmsController : ControllerBase
                 Name = farm.Name,
                 Code = farm.Code,
                 Location = farm.Location,
+                Latitude = farm.Latitude,
+                Longitude = farm.Longitude,
                 IsActive = farm.IsActive,
                 CreatedAtUtc = farm.CreatedAtUtc
             })
@@ -103,6 +112,30 @@ public sealed class FarmsController : ControllerBase
         }
 
         return Ok(farm);
+    }
+
+    // GET: api/farms/{farmId}/permissions
+    [HttpGet("{farmId:guid}/permissions")]
+    public async Task<IActionResult> GetMyPermissions(
+        Guid farmId,
+        CancellationToken cancellationToken)
+    {
+        var userIdValue = User.FindFirstValue(
+            ClaimTypes.NameIdentifier);
+
+        if (!Guid.TryParse(userIdValue, out var userId))
+        {
+            return Unauthorized();
+        }
+
+        var permissions = await _farmAuthorizationService
+            .GetPermissionsAsync(userId, farmId, cancellationToken);
+
+        return Ok(new
+        {
+            farmId,
+            permissions
+        });
     }
 
     // POST: api/farms
@@ -137,6 +170,8 @@ public sealed class FarmsController : ControllerBase
             Name = name,
             Code = code,
             Location = location,
+            Latitude = request.Latitude,
+            Longitude = request.Longitude,
             IsActive = true,
             CreatedAtUtc = DateTime.UtcNow
         };
@@ -151,6 +186,8 @@ public sealed class FarmsController : ControllerBase
             Name = farm.Name,
             Code = farm.Code,
             Location = farm.Location,
+            Latitude = farm.Latitude,
+            Longitude = farm.Longitude,
             IsActive = farm.IsActive,
             CreatedAtUtc = farm.CreatedAtUtc
         };
@@ -186,6 +223,8 @@ public sealed class FarmsController : ControllerBase
         farm.Location = string.IsNullOrWhiteSpace(request.Location)
             ? null
             : request.Location.Trim();
+        farm.Latitude = request.Latitude;
+        farm.Longitude = request.Longitude;
 
         await _db.SaveChangesAsync(cancellationToken);
 
@@ -195,6 +234,8 @@ public sealed class FarmsController : ControllerBase
             Name = farm.Name,
             Code = farm.Code,
             Location = farm.Location,
+            Latitude = farm.Latitude,
+            Longitude = farm.Longitude,
             IsActive = farm.IsActive,
             CreatedAtUtc = farm.CreatedAtUtc
         });

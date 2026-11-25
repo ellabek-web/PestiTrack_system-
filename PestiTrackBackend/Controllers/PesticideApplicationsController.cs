@@ -4,8 +4,11 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using PestiTrackBackend.Data;
 using PestiTrackBackend.DTOs.Applications;
+using PestiTrackBackend.DTOs.Compliance;
 using PestiTrackBackend.Models.Applications;
 using PestiTrackBackend.Models.Crops;
+using PestiTrackBackend.Models.Weather;
+using PestiTrackBackend.Security;
 using PestiTrackBackend.Security.Authorization;
 using System.Data;
 using PestiTrackBackend.Models.Inventory;
@@ -219,6 +222,286 @@ public sealed class PesticideApplicationsController : ControllerBase
             return NotFound(new { message = "Application was not found." });
 
         return Ok(MapToResponse(application));
+    }
+
+    // GET: api/farms/{farmId}/applications/{applicationId}/safety-check
+    [HttpGet("{applicationId:guid}/safety-check")]
+    [FarmPermission(PermissionCodes.ApplicationsView)]
+    public async Task<ActionResult<ApplicationSafetyCheckResponse>> GetSafetyCheck(
+        Guid farmId,
+        Guid applicationId,
+        CancellationToken cancellationToken)
+    {
+        var application = await _db.PesticideApplications
+            .AsNoTracking()
+            .Include(a => a.FieldCrop)
+            .Include(a => a.Worker)
+            .Include(a => a.WeatherRecord)
+            .Include(a => a.Products)
+                .ThenInclude(p => p.Product)
+            .Include(a => a.Products)
+                .ThenInclude(p => p.InventoryTransaction)
+            .FirstOrDefaultAsync(
+                a => a.Id == applicationId && a.FarmId == farmId,
+                cancellationToken);
+
+        if (application is null)
+            return NotFound(new { message = "Pesticide application not found." });
+
+        var checks = new List<SafetyCheckItem>();
+        var applicationDate = DateOnly.FromDateTime(application.ApplicationDateUtc);
+
+        // 1. Applicator certification check.
+        if (!application.Worker.IsActive || !application.Worker.IsApplicator)
+        {
+            checks.Add(new SafetyCheckItem
+            {
+                Code = "applicator.eligibility",
+                Severity = "Violation",
+                Title = "Applicator eligibility",
+                Message = $"{application.Worker.FullName} is not an active certified applicator."
+            });
+        }
+        else if (string.IsNullOrWhiteSpace(application.Worker.CertificationNumber) ||
+                 !application.Worker.CertificationExpiryDate.HasValue ||
+                 application.Worker.CertificationExpiryDate.Value.Date < application.ApplicationDateUtc.Date)
+        {
+            checks.Add(new SafetyCheckItem
+            {
+                Code = "applicator.certification",
+                Severity = "Violation",
+                Title = "Applicator certification",
+                Message = $"{application.Worker.FullName}'s certification is missing or expired for the application date."
+            });
+        }
+        else
+        {
+            checks.Add(new SafetyCheckItem
+            {
+                Code = "applicator.certification",
+                Severity = "Pass",
+                Title = "Applicator certification",
+                Message = $"{application.Worker.FullName} holds valid certification {application.Worker.CertificationNumber} through {application.Worker.CertificationExpiryDate.Value:yyyy-MM-dd}."
+            });
+        }
+
+        // 2. Product registration, max rate, wind threshold, batch expiry, REI, and PHI.
+        int? maxReiHours = null;
+        int? maxPhiDays = null;
+
+        foreach (var line in application.Products)
+        {
+            var product = line.Product;
+
+            if (product.RegistrationExpiryDate.HasValue)
+            {
+                if (product.RegistrationExpiryDate.Value < applicationDate)
+                {
+                    checks.Add(new SafetyCheckItem
+                    {
+                        Code = "product.registration",
+                        Severity = "Violation",
+                        Title = $"{product.Name} registration",
+                        Message = $"Registration expired on {product.RegistrationExpiryDate.Value:yyyy-MM-dd}."
+                    });
+                }
+                else if (product.RegistrationExpiryDate.Value <= applicationDate.AddDays(30))
+                {
+                    checks.Add(new SafetyCheckItem
+                    {
+                        Code = "product.registration",
+                        Severity = "Warning",
+                        Title = $"{product.Name} registration",
+                        Message = $"Registration expires soon on {product.RegistrationExpiryDate.Value:yyyy-MM-dd}."
+                    });
+                }
+                else
+                {
+                    checks.Add(new SafetyCheckItem
+                    {
+                        Code = "product.registration",
+                        Severity = "Pass",
+                        Title = $"{product.Name} registration",
+                        Message = $"Registration is valid through {product.RegistrationExpiryDate.Value:yyyy-MM-dd}."
+                    });
+                }
+            }
+
+            if (product.MaxApplicationRate.HasValue)
+            {
+                var unitMatches =
+                    string.IsNullOrWhiteSpace(product.MaxApplicationRateUnit) ||
+                    string.Equals(
+                        product.MaxApplicationRateUnit.Trim(),
+                        line.RateUnit.Trim(),
+                        StringComparison.OrdinalIgnoreCase);
+
+                if (!unitMatches)
+                {
+                    checks.Add(new SafetyCheckItem
+                    {
+                        Code = "product.max-rate",
+                        Severity = "Warning",
+                        Title = $"{product.Name} rate unit",
+                        Message = $"Applied rate uses '{line.RateUnit}' while label maximum is {product.MaxApplicationRate.Value} {product.MaxApplicationRateUnit}. Verify unit conversion."
+                    });
+                }
+                else if (line.ApplicationRate > product.MaxApplicationRate.Value)
+                {
+                    checks.Add(new SafetyCheckItem
+                    {
+                        Code = "product.max-rate",
+                        Severity = "Violation",
+                        Title = $"{product.Name} maximum rate",
+                        Message = $"Applied rate ({line.ApplicationRate} {line.RateUnit}) exceeds label maximum ({product.MaxApplicationRate.Value} {product.MaxApplicationRateUnit ?? line.RateUnit})."
+                    });
+                }
+                else
+                {
+                    checks.Add(new SafetyCheckItem
+                    {
+                        Code = "product.max-rate",
+                        Severity = "Pass",
+                        Title = $"{product.Name} maximum rate",
+                        Message = $"Applied rate ({line.ApplicationRate} {line.RateUnit}) is within label maximum ({product.MaxApplicationRate.Value} {product.MaxApplicationRateUnit ?? line.RateUnit})."
+                    });
+                }
+            }
+
+            if (product.MaxWindSpeedMetersPerSecond.HasValue)
+            {
+                if (application.WeatherRecord?.WindSpeedMetersPerSecond is null)
+                {
+                    checks.Add(new SafetyCheckItem
+                    {
+                        Code = "weather.wind-speed",
+                        Severity = "Warning",
+                        Title = $"{product.Name} wind limit",
+                        Message = $"Product specifies a {product.MaxWindSpeedMetersPerSecond.Value} m/s wind limit, but no wind speed is recorded on this application."
+                    });
+                }
+                else if (application.WeatherRecord.WindSpeedMetersPerSecond.Value >
+                         product.MaxWindSpeedMetersPerSecond.Value)
+                {
+                    checks.Add(new SafetyCheckItem
+                    {
+                        Code = "weather.wind-speed",
+                        Severity = "Violation",
+                        Title = $"{product.Name} wind limit",
+                        Message = $"Recorded wind speed ({application.WeatherRecord.WindSpeedMetersPerSecond.Value} m/s) exceeds label maximum ({product.MaxWindSpeedMetersPerSecond.Value} m/s)."
+                    });
+                }
+                else
+                {
+                    checks.Add(new SafetyCheckItem
+                    {
+                        Code = "weather.wind-speed",
+                        Severity = "Pass",
+                        Title = $"{product.Name} wind limit",
+                        Message = $"Recorded wind speed ({application.WeatherRecord.WindSpeedMetersPerSecond.Value} m/s) is within label limit ({product.MaxWindSpeedMetersPerSecond.Value} m/s)."
+                    });
+                }
+            }
+
+            var batchExpiry = line.InventoryTransaction?.ExpiryDate;
+            if (!batchExpiry.HasValue)
+            {
+                batchExpiry = await _db.InventoryTransactions
+                    .AsNoTracking()
+                    .Where(t =>
+                        t.FarmId == farmId &&
+                        t.ProductId == line.ProductId &&
+                        t.BatchNumber == line.BatchNumber)
+                    .Select(t => t.ExpiryDate)
+                    .FirstOrDefaultAsync(cancellationToken);
+            }
+
+            if (batchExpiry.HasValue)
+            {
+                if (batchExpiry.Value < applicationDate)
+                {
+                    checks.Add(new SafetyCheckItem
+                    {
+                        Code = "inventory.batch-expiry",
+                        Severity = "Violation",
+                        Title = $"{product.Name} batch {line.BatchNumber}",
+                        Message = $"Batch expired on {batchExpiry.Value:yyyy-MM-dd} before the application date."
+                    });
+                }
+                else
+                {
+                    checks.Add(new SafetyCheckItem
+                    {
+                        Code = "inventory.batch-expiry",
+                        Severity = "Pass",
+                        Title = $"{product.Name} batch {line.BatchNumber}",
+                        Message = $"Batch is valid through {batchExpiry.Value:yyyy-MM-dd}."
+                    });
+                }
+            }
+
+            if (product.ReEntryIntervalHours.HasValue)
+            {
+                maxReiHours = maxReiHours.HasValue
+                    ? Math.Max(maxReiHours.Value, product.ReEntryIntervalHours.Value)
+                    : product.ReEntryIntervalHours.Value;
+            }
+
+            if (product.PreHarvestIntervalDays.HasValue)
+            {
+                maxPhiDays = maxPhiDays.HasValue
+                    ? Math.Max(maxPhiDays.Value, product.PreHarvestIntervalDays.Value)
+                    : product.PreHarvestIntervalDays.Value;
+            }
+        }
+
+        DateTimeOffset? reEntryAllowedAtUtc = maxReiHours.HasValue
+            ? new DateTimeOffset(
+                DateTime.SpecifyKind(
+                    application.ApplicationDateUtc.AddHours(maxReiHours.Value),
+                    DateTimeKind.Utc))
+            : null;
+
+        DateOnly? earliestSafeHarvestDate = maxPhiDays.HasValue
+            ? applicationDate.AddDays(maxPhiDays.Value)
+            : null;
+
+        if (earliestSafeHarvestDate.HasValue &&
+            application.FieldCrop.ExpectedHarvestDate.HasValue &&
+            application.FieldCrop.ExpectedHarvestDate.Value < earliestSafeHarvestDate.Value)
+        {
+            checks.Add(new SafetyCheckItem
+            {
+                Code = "crop.pre-harvest-interval",
+                Severity = "Warning",
+                Title = "Pre-harvest interval conflict",
+                Message = $"Earliest safe harvest date ({earliestSafeHarvestDate.Value:yyyy-MM-dd}) is after the crop's expected harvest date ({application.FieldCrop.ExpectedHarvestDate.Value:yyyy-MM-dd})."
+            });
+        }
+        else if (earliestSafeHarvestDate.HasValue)
+        {
+            checks.Add(new SafetyCheckItem
+            {
+                Code = "crop.pre-harvest-interval",
+                Severity = "Pass",
+                Title = "Pre-harvest interval",
+                Message = $"Earliest safe harvest date is {earliestSafeHarvestDate.Value:yyyy-MM-dd}."
+            });
+        }
+
+        var violationCount = checks.Count(c => c.Severity == "Violation");
+        var warningCount = checks.Count(c => c.Severity == "Warning");
+
+        return Ok(new ApplicationSafetyCheckResponse
+        {
+            ApplicationId = application.Id,
+            IsCompliant = violationCount == 0,
+            ViolationCount = violationCount,
+            WarningCount = warningCount,
+            ReEntryAllowedAtUtc = reEntryAllowedAtUtc,
+            EarliestSafeHarvestDate = earliestSafeHarvestDate,
+            Checks = checks
+        });
     }
 
     // POST: api/farms/{farmId}/applications
@@ -596,6 +879,16 @@ public sealed class PesticideApplicationsController : ControllerBase
                 });
             }
 
+            var batchExpiry = expiryDates[0];
+            if (batchExpiry.HasValue &&
+                batchExpiry.Value < DateOnly.FromDateTime(application.ApplicationDateUtc))
+            {
+                return Conflict(new
+                {
+                    message = $"Batch '{batchNumber}' for product '{productLine.Product.Name}' expired on {batchExpiry.Value:yyyy-MM-dd} and cannot be applied."
+                });
+            }
+
             var availableQuantity = existingTransactions.Sum(t =>
                 t.TransactionType == InventoryTransactionType.StockIn ||
                 t.TransactionType == InventoryTransactionType.AdjustmentIn
@@ -785,9 +1078,11 @@ public sealed class PesticideApplicationsController : ControllerBase
         }
 
         // 5. Validate optional weather record.
+        WeatherRecord? weather = null;
+
         if (weatherRecordId.HasValue)
         {
-            var weather = await _db.WeatherRecords
+            weather = await _db.WeatherRecords
                 .AsNoTracking()
                 .FirstOrDefaultAsync(
                     w => w.Id == weatherRecordId.Value &&
@@ -804,7 +1099,7 @@ public sealed class PesticideApplicationsController : ControllerBase
             }
         }
 
-        // 6. Validate product lines.
+        // 6. Validate product lines and authoritative label safety restrictions.
         var productIds = products
             .Select(p => p.ProductId)
             .Distinct()
@@ -813,12 +1108,12 @@ public sealed class PesticideApplicationsController : ControllerBase
         if (productIds.Any(id => id == Guid.Empty))
             return "Every product line must contain a valid product.";
 
-        var activeProductCount = await _db.Products
-            .CountAsync(
-                p => productIds.Contains(p.Id) && p.IsActive,
-                cancellationToken);
+        var activeProducts = await _db.Products
+            .AsNoTracking()
+            .Where(p => productIds.Contains(p.Id) && p.IsActive)
+            .ToDictionaryAsync(p => p.Id, cancellationToken);
 
-        if (activeProductCount != productIds.Count)
+        if (activeProducts.Count != productIds.Count)
         {
             return "One or more selected products do not exist or are inactive.";
         }
@@ -846,6 +1141,37 @@ public sealed class PesticideApplicationsController : ControllerBase
             if (!productBatchKeys.Add(key))
             {
                 return "The same product and batch cannot appear more than once in an application.";
+            }
+
+            var catalogProduct = activeProducts[product.ProductId];
+
+            if (catalogProduct.RegistrationExpiryDate.HasValue &&
+                catalogProduct.RegistrationExpiryDate.Value < applicationDate)
+            {
+                return $"Product '{catalogProduct.Name}' registration expired on {catalogProduct.RegistrationExpiryDate.Value:yyyy-MM-dd}.";
+            }
+
+            if (catalogProduct.MaxApplicationRate.HasValue)
+            {
+                var unitMatches =
+                    string.IsNullOrWhiteSpace(catalogProduct.MaxApplicationRateUnit) ||
+                    string.Equals(
+                        catalogProduct.MaxApplicationRateUnit.Trim(),
+                        product.RateUnit.Trim(),
+                        StringComparison.OrdinalIgnoreCase);
+
+                if (unitMatches &&
+                    product.ApplicationRate > catalogProduct.MaxApplicationRate.Value)
+                {
+                    return $"Application rate for '{catalogProduct.Name}' ({product.ApplicationRate} {product.RateUnit}) exceeds the label maximum ({catalogProduct.MaxApplicationRate.Value} {catalogProduct.MaxApplicationRateUnit ?? product.RateUnit}).";
+                }
+            }
+
+            if (weather?.WindSpeedMetersPerSecond is decimal windSpeed &&
+                catalogProduct.MaxWindSpeedMetersPerSecond.HasValue &&
+                windSpeed > catalogProduct.MaxWindSpeedMetersPerSecond.Value)
+            {
+                return $"Recorded wind speed ({windSpeed} m/s) exceeds the label maximum for '{catalogProduct.Name}' ({catalogProduct.MaxWindSpeedMetersPerSecond.Value} m/s).";
             }
         }
 
