@@ -140,7 +140,9 @@ public static class DatabaseOptions
     /// Converts a <c>postgres://user:pass@host:port/db?sslmode=require</c> URL
     /// (Neon / Supabase format) into an Npgsql connection string.
     /// Neon and Supabase both require SSL; the pooled Neon endpoint also
-    /// needs the <c>endpoint</c> parameter stripped out of the query string.
+    /// needs the <c>endpoint</c> parameter stripped out of the query string,
+    /// and a pooled (<c>-pooler</c>) host is rewritten to the direct endpoint
+    /// (see below) so the user can paste Neon's default string unchanged.
     /// </summary>
     public static string ConvertDatabaseUrlToNpgsqlConnectionString(string url)
     {
@@ -181,8 +183,22 @@ public static class DatabaseOptions
             }
             : "Require";
 
+        // Neon's pooled endpoint (host contains "-pooler", PgBouncer in
+        // transaction mode) is unreliable with Npgsql: SSL negotiation and
+        // prepared statements both break through the pooler. The direct
+        // endpoint is the same hostname minus "-pooler", and a single
+        // Render service (pool capped at 10 below) is far inside Neon's
+        // free connection limit — so rewrite pooled hosts to direct.
+        var host = uri.Host;
+        const string poolerMarker = "-pooler";
+        if (host.Contains(poolerMarker, StringComparison.OrdinalIgnoreCase))
+        {
+            host = host.Replace(poolerMarker, string.Empty,
+                StringComparison.OrdinalIgnoreCase);
+        }
+
         var builder = new System.Text.StringBuilder();
-        builder.Append($"Host={uri.Host};");
+        builder.Append($"Host={host};");
         if (uri.Port > 0)
         {
             builder.Append($"Port={uri.Port};");

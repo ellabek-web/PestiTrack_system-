@@ -91,11 +91,11 @@ Browser ──HTTPS──> Vercel (React frontend, free)
 1. Go to [neon.tech](https://neon.tech) and create a free account (no credit card).
 2. Create a project (region: Frankfurt is closest to East Africa) and a database, e.g. `pestitrack`.
 3. Copy the connection string from the dashboard. It looks like:
-   `postgres://user:password@ep-xxx-xxx.eu-central-1.aws.neon.tech/pestitrack?sslmode=require`
-   Use the **pooled** connection string if Neon offers it — Render free + Neon free both cap connections, and pooling helps.
+   `postgres://user:password@ep-xxx-xxx-pooler.eu-central-1.aws.neon.tech/pestitrack?sslmode=require`
+   Paste it exactly as Neon gives it — pooled or direct, either works. (The app converts a pooled `-pooler` host to Neon's direct endpoint automatically, because Npgsql cannot reliably negotiate SSL through Neon's PgBouncer pooler; a single Render service stays well inside Neon's free connection limit.)
 4. Keep this string secret. It goes into Render as an env var, never into git.
 
-(Supabase works the same way — create a free project at [supabase.com](https://supabase.com), copy its `postgres://` connection string from Settings → Database, and use it as `DATABASE_URL`. Prefer Neon's pooled URL if you have the choice; Supabase's direct connection string is fine too.)
+(Supabase works the same way — create a free project at [supabase.com](https://supabase.com), copy its `postgres://` connection string from Settings → Database, and use it as `DATABASE_URL`.)
 
 ### Step 2 — Backend: Render (free)
 1. Go to [render.com](https://render.com) and create a free account (no credit card).
