@@ -156,9 +156,11 @@ public sealed class DashboardController : ControllerBase
             response.VisibleSections.Add("workers");
 
             var certificationEnd = inThirtyDays.ToDateTime(
-                TimeOnly.MaxValue);
+                TimeOnly.MaxValue,
+                DateTimeKind.Utc);
             var todayStart = today.ToDateTime(
-                TimeOnly.MinValue);
+                TimeOnly.MinValue,
+                DateTimeKind.Utc);
 
             response.Workers = new WorkerDashboardSummary
             {
