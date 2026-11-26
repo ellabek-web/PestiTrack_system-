@@ -1,6 +1,7 @@
 
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
@@ -85,6 +86,31 @@ else
     });
 }
 
+
+// Persist ASP.NET Core Data Protection keys in the database, not the
+// container filesystem: the login cookie and CSRF tokens are encrypted
+// with these keys, and without this every Render restart/redeploy
+// generated new keys and invalidated every existing login (401 on
+// /api/auth/me).
+//
+// Wiring note: AddDataProtection does NOT pick up an IXmlRepository
+// from DI on its own — KeyManagementOptions.XmlRepository must be set
+// explicitly (verified by a round-trip harness: without this line the
+// repository is never called and keys stay in memory). The keys table
+// is created by the normal migrations (entrypoint runs --migrate on
+// start), so no extra startup step is needed. The one redeploy that
+// ships this logs everyone out once — the old keys are lost — after
+// that, logins survive restarts.
+builder.Services.AddSingleton<
+    Microsoft.AspNetCore.DataProtection.Repositories.IXmlRepository,
+    PestiTrackBackend.Security.DataProtection.DatabaseDataProtectionKeyRepository>();
+builder.Services.AddDataProtection()
+    .SetApplicationName("PestiTrack");
+builder.Services.AddOptions<
+    Microsoft.AspNetCore.DataProtection.KeyManagement.KeyManagementOptions>()
+    .Configure<
+        Microsoft.AspNetCore.DataProtection.Repositories.IXmlRepository>(
+        (options, repository) => options.XmlRepository = repository);
 
 // Configure ASP.NET Core Identity.
 builder.Services

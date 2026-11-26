@@ -13,6 +13,8 @@ PestiTrack uses host-only, `Secure`, `HttpOnly` cookies (`__Host-PestiTrack.Auth
 
 The API picks the provider automatically: if `DATABASE_URL` is a `postgres://` URL it uses PostgreSQL; otherwise it uses `Database:Provider` (`DATABASE_PROVIDER` env var, `SqlServer` / `PostgreSql` / `Auto`), and with `Auto` it detects the provider from the connection string. The same code, the same controllers — only the connection string changes. See `PestiTrackBackend/Data/DatabaseProvider.cs`.
 
+Login sessions survive restarts and redeploys: the ASP.NET Core Data Protection keys are stored in the `DataProtectionKeys` table (migration `AddDataProtectionKeys`, both providers) instead of the container filesystem, via a small `IXmlRepository` (`PestiTrackBackend/Security/DataProtection/DatabaseDataProtectionKeyRepository.cs`, wired in `Program.cs`). The one redeploy that ships this logs everyone out once — the old container keys are lost — after that, sessions survive restarts. The 30-minute sliding cookie expiry is unchanged.
+
 > All timestamps in the app are UTC (`DateTime.UtcNow`, `DateTimeOffset` in DTOs). PostgreSQL stores them as `timestamp with time zone`, SQL Server as `datetime2` — the values are identical on both.
 
 ---

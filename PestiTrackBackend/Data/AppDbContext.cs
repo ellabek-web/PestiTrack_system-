@@ -83,10 +83,34 @@ public class AppDbContext
     public DbSet<FarmNotification> FarmNotifications
         => Set<FarmNotification>();
 
+    // ASP.NET Core Data Protection keys. Persisted in the database (via
+    // DatabaseDataProtectionKeyRepository, wired in Program.cs) so login
+    // cookies and CSRF tokens survive container restarts and redeploys
+    // on Render, instead of living only in the container filesystem
+    // where every restart generated new keys and invalidated every
+    // existing login (401 on /api/auth/me).
+    public DbSet<PersistedDataProtectionKey> DataProtectionKeys
+        => Set<PersistedDataProtectionKey>();
+
     protected override void OnModelCreating(ModelBuilder builder)
     {
         // Configure the standard ASP.NET Core Identity tables first.
         base.OnModelCreating(builder);
+
+        // Data Protection key ring table. Xml holds the full key XML
+        // (string maps to nvarchar(max) on SQL Server, text on
+        // PostgreSQL — no length limit either way). The table/columns
+        // match the schema the standard
+        // Microsoft.AspNetCore.DataProtection.EntityFrameworkCore
+        // provider would create, so switching to PersistKeysToDbContext
+        // later needs no new migration.
+        builder.Entity<PersistedDataProtectionKey>(entity =>
+        {
+            entity.ToTable("DataProtectionKeys");
+
+            entity.Property(key => key.Xml)
+                .IsRequired();
+        });
 
         // Configure custom Identity fields.
         builder.Entity<ApplicationUser>(entity =>
