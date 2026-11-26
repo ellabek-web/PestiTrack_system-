@@ -49,14 +49,42 @@ builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<AuditSaveChangesInterceptor>();
 
-// Register Entity Framework Core with SQL Server.
-builder.Services.AddDbContext<AppDbContext>((services, options) =>
+// Register Entity Framework Core with the configured provider:
+// SQL Server locally, PostgreSQL (Neon / Supabase) in the cloud.
+// See Data/DatabaseProvider.cs for how the provider is resolved:
+// DATABASE_URL (postgres://...) wins, then Database:Provider
+// (DATABASE_PROVIDER), then auto-detection from the connection string.
+// SQL Server uses AppDbContext itself (its migrations live in
+// Data/Migrations, untouched); PostgreSQL uses the derived
+// PostgresAppDbContext with its own migrations in
+// Data/Migrations/Postgres, because EF Core keeps one
+// provider-specific model snapshot per context type.
+var (databaseProvider, databaseConnectionString) =
+    DatabaseOptions.Resolve(builder.Configuration);
+
+if (databaseProvider == DatabaseProvider.PostgreSql)
 {
-    options.UseSqlServer(
-        builder.Configuration.GetConnectionString("DefaultConnection"));
-    options.AddInterceptors(
-        services.GetRequiredService<AuditSaveChangesInterceptor>());
-});
+    builder.Services.AddDbContext<PostgresAppDbContext>((services, options) =>
+    {
+        options.UseNpgsql(databaseConnectionString);
+        options.AddInterceptors(
+            services.GetRequiredService<AuditSaveChangesInterceptor>());
+    });
+    // Controllers / services inject AppDbContext; give them the
+    // Postgres instance.
+    builder.Services.AddScoped<AppDbContext>(services =>
+        services.GetRequiredService<PostgresAppDbContext>());
+}
+else
+{
+    builder.Services.AddDbContext<AppDbContext>((services, options) =>
+    {
+        options.UseSqlServer(databaseConnectionString);
+        options.AddInterceptors(
+            services.GetRequiredService<AuditSaveChangesInterceptor>());
+    });
+}
+
 
 // Configure ASP.NET Core Identity.
 builder.Services
@@ -310,6 +338,11 @@ builder.Services.AddSwaggerGen(options =>
 });
 
 var app = builder.Build();
+
+// Log the resolved provider once at startup: on Render this is the
+// first thing to check in the logs when the database is unreachable.
+app.Logger.LogInformation(
+    "PestiTrack database provider: {Provider}", databaseProvider);
 
 // Handle explicit EF Core database migration command for containers / CI.
 if (args.Contains(

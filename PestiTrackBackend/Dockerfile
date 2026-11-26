@@ -17,7 +17,12 @@ ENV ASPNETCORE_URLS=http://+:8080 \
 
 COPY --from=build /app/publish ./
 
+# Entrypoint: applies EF Core migrations on start (idempotent) and
+# listens on $PORT when the host sets it (Render free web services do).
+COPY entrypoint.sh ./
+RUN chmod +x entrypoint.sh
+
 EXPOSE 8080
 USER $APP_UID
 
-ENTRYPOINT ["dotnet", "PestiTrackBackend.dll"]
+ENTRYPOINT ["./entrypoint.sh"]

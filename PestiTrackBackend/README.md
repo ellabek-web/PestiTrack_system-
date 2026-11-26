@@ -177,7 +177,7 @@ Farm-scoped compliance monitoring and inspection/incident tracking endpoints:
 - **Rate limiting**: Per-IP global rate limiting (`RateLimiting:GlobalPermitLimitPerMinute`, default `200/min`) and stricter authentication rate limiting (`RateLimiting:AuthPermitLimitPerMinute`, default `10/min`) on `/api/auth/login` and `/api/auth/change-password`.
 - **Health probes**:
   - `GET /health/live` — liveness probe
-  - `GET /health/ready` — readiness probe verifying SQL Server connectivity
+  - `GET /health/ready` — readiness probe verifying database connectivity (SQL Server locally, PostgreSQL in the cloud)
 - **Reverse-proxy & CORS readiness**: `ForwardedHeaders` enabled (`X-Forwarded-For`, `X-Forwarded-Proto`) and optional credentialed `Cors:AllowedOrigins` configuration.
 
 ## Development commands

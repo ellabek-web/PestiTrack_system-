@@ -18,13 +18,28 @@ using PestiTrackBackend.Models.Notifications;
 
 namespace PestiTrackBackend.Data;
 
-public sealed class AppDbContext
+public class AppDbContext
     : IdentityDbContext<ApplicationUser, ApplicationRole, Guid>
 {
-    public AppDbContext(DbContextOptions<AppDbContext> options)
+    // Non-generic DbContextOptions on purpose: the provider-specific
+    // derived context (PostgresAppDbContext) passes its own typed
+    // options straight through. Tests keep passing
+    // DbContextOptions<AppDbContext> -- it derives from DbContextOptions.
+    public AppDbContext(DbContextOptions options)
         : base(options)
     {
     }
+
+    // True when the model is being built for PostgreSQL. Used to keep
+    // SQL Server-only column types / filter SQL out of the Postgres model.
+    // (Database.ProviderName is set by the time OnModelCreating runs, for
+    // design-time, runtime and in-memory builds alike.)
+    private bool IsPostgreSql =>
+        Database.ProviderName?.Contains(
+            "Npgsql", StringComparison.OrdinalIgnoreCase) == true;
+
+    private string FilterIsNotNull(string column) =>
+        IsPostgreSql ? $"\"{column}\" IS NOT NULL" : $"[{column}] IS NOT NULL";
 
     // Farm management
     public DbSet<Farm> Farms => Set<Farm>();
@@ -114,7 +129,7 @@ public sealed class AppDbContext
         ConfigureFarmNotification(builder);
     }
 
-    private static void ConfigureAuditLog(ModelBuilder builder)
+    private void ConfigureAuditLog(ModelBuilder builder)
     {
         builder.Entity<AuditLog>(entity =>
         {
@@ -134,8 +149,15 @@ public sealed class AppDbContext
                 .HasMaxLength(500)
                 .IsRequired();
 
+            // nvarchar(max) is SQL Server-only. On PostgreSQL the
+            // same property maps to text by default, which is equivalent.
+            if (!IsPostgreSql)
+            {
+                entity.Property(log => log.ChangesJson)
+                    .HasColumnType("nvarchar(max)");
+            }
+
             entity.Property(log => log.ChangesJson)
-                .HasColumnType("nvarchar(max)")
                 .IsRequired();
 
             entity.Property(log => log.ActorDisplayName)
@@ -643,7 +665,7 @@ public sealed class AppDbContext
         });
     }
 
-    private static void ConfigureInventory(ModelBuilder builder)
+    private void ConfigureInventory(ModelBuilder builder)
     {
         builder.Entity<InventoryTransaction>(entity =>
         {
@@ -697,7 +719,7 @@ public sealed class AppDbContext
                 transaction.Reference
             })
             .HasDatabaseName("IX_InventoryTransactions_ReferenceCheck")
-            .HasFilter("[Reference] IS NOT NULL");
+            .HasFilter(FilterIsNotNull("Reference"));
 
 
             entity.HasOne(transaction => transaction.Farm)
@@ -726,7 +748,7 @@ public sealed class AppDbContext
             entity.HasIndex(transaction =>
                     transaction.PesticideApplicationProductId)
                 .IsUnique()
-                .HasFilter("[PesticideApplicationProductId] IS NOT NULL")
+                .HasFilter(FilterIsNotNull("PesticideApplicationProductId"))
                 .HasDatabaseName(
                     "IX_InventoryTransactions_ApplicationProductId");
         });

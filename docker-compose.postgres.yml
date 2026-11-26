@@ -1,0 +1,67 @@
+# PestiTrack with PostgreSQL — local equivalent of the free cloud stack
+# (Neon Postgres + the same backend image Render runs).
+#
+#   docker compose -f docker-compose.postgres.yml up -d --build
+#   docker compose -f docker-compose.postgres.yml exec backend dotnet PestiTrackBackend.dll --bootstrap-admin
+#
+# Then open http://localhost:8080/health/ready (or the frontend on :8081).
+# The default docker-compose.yml is unchanged and still runs SQL Server.
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: "${PG_USER:-postgres}"
+      POSTGRES_PASSWORD: "${PG_PASSWORD:?Set PG_PASSWORD in .env}"
+      POSTGRES_DB: "${PG_DATABASE:-PestiTrackDb}"
+    ports:
+      - "${PG_PORT:-5433}:5432"
+    volumes:
+      - pestitrack_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-postgres} -d $${POSTGRES_DB:-PestiTrackDb}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 5s
+
+  backend:
+    build:
+      context: ./PestiTrackBackend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://+:8080
+      DATABASE_PROVIDER: PostgreSql
+      DATABASE_URL: "postgres://${PG_USER:-postgres}:${PG_PASSWORD}@db:5432/${PG_DATABASE:-PestiTrackDb}?sslmode=disable"
+      ReverseProxy__TrustForwardedHeaders: "true"
+      ReverseProxy__TerminateTlsExternally: "true"
+      RateLimiting__GlobalPermitLimitPerMinute: "${RATE_LIMIT_GLOBAL_PER_MINUTE:-200}"
+      RateLimiting__AuthPermitLimitPerMinute: "${RATE_LIMIT_AUTH_PER_MINUTE:-10}"
+    ports:
+      - "${BACKEND_PORT:-8080}:8080"
+    healthcheck:
+      test: ["CMD", "dotnet", "PestiTrackBackend.dll", "--healthcheck"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  frontend:
+    build:
+      context: ./pestitrack-frontend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "${FRONTEND_HTTP_PORT:-8081}:80"
+      - "${FRONTEND_HTTPS_PORT:-8443}:443"
+
+volumes:
+  pestitrack_pg_data:

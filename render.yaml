@@ -1,0 +1,57 @@
+# PestiTrack — free deployment on Render (no credit card required).
+#
+# Architecture (all free tiers):
+#   Database : Neon PostgreSQL (free, no credit card) — create at neon.tech
+#   Backend  : this Render web service (Docker, free plan)
+#   Frontend : Vercel (free Hobby plan) — see pestitrack-frontend/vercel.json
+#
+# Deploy steps (also in DEPLOYMENT.md, Part 3):
+#   1. Create a free Neon project, copy its connection string
+#      (postgres://user:password@host/db?sslmode=require).
+#   2. In Render: New > Blueprint, point it at this repo. Render reads
+#      this file and creates the service below.
+#   3. In the Render dashboard, set DATABASE_URL to the Neon string
+#      (paste it as the value — do NOT commit it to git).
+#   4. After the first deploy, set Cors__AllowedOrigins to your Vercel
+#      URL (https://<your-project>.vercel.app) and redeploy.
+#   5. Create the first admin once, via Render Shell:
+#        PESTITRACK_BOOTSTRAP_ADMIN_EMAIL=you@example.com \
+#        PESTITRACK_BOOTSTRAP_ADMIN_PASSWORD='ChangeMe_Admin123!' \
+#        PESTITRACK_BOOTSTRAP_ADMIN_DISPLAY_NAME='System Administrator' \
+#        dotnet PestiTrackBackend.dll --bootstrap-admin
+#
+# Free-tier notes:
+#   - Render free spins down after 15 min idle; the first request after
+#     that takes ~30-60s while it wakes. That is normal on the free plan.
+#   - Neon free: 512 MB storage, 0.25 CU. Plenty for PestiTrack.
+#   - Keep Maximum Pool Size small (already in DatabaseProvider.cs):
+#     Render free + Neon free both cap concurrent connections.
+
+services:
+  - type: web
+    name: pestitrack-api
+    runtime: docker
+    dockerfilePath: ./PestiTrackBackend/Dockerfile
+    dockerContext: ./PestiTrackBackend
+    plan: free
+    region: frankfurt
+    healthCheckPath: /health/live
+    autoDeploy: true
+    envVars:
+      - key: ASPNETCORE_ENVIRONMENT
+        value: Production
+      # Render sets PORT itself; entrypoint.sh listens on it.
+      - key: DATABASE_PROVIDER
+        value: PostgreSql
+      # Set this in the Render dashboard (secret) to your Neon URL.
+      # It is intentionally left without a value here.
+      - key: DATABASE_URL
+        sync: false
+      - key: ReverseProxy__TrustForwardedHeaders
+        value: "true"
+      - key: ReverseProxy__TerminateTlsExternally
+        value: "true"
+      # Replace with your Vercel URL after the frontend is deployed,
+      # e.g. https://pestitrack.vercel.app
+      - key: Cors__AllowedOrigins
+        value: https://YOUR_VERCEL_APP.vercel.app
