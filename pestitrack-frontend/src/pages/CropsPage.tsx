@@ -44,7 +44,7 @@ const statuses: FieldCropStatus[] = ['Planned', 'Planted', 'Harvested', 'Cancell
 const numericStatuses: FieldCropStatus[] = ['Planned', 'Planted', 'Harvested', 'Cancelled']
 
 function statusName(status: FieldCrop['status']): FieldCropStatus {
-  return typeof status === 'number' ? (numericStatuses[status] ?? 'Planned') : status
+  return typeof status === 'number' ? (numericStatuses[status - 1] ?? 'Planned') : status
 }
 
 function statusColor(status: FieldCropStatus): 'default' | 'info' | 'success' | 'error' {

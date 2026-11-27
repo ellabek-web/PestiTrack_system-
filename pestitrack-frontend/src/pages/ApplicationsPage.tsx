@@ -81,7 +81,7 @@ interface EditableProductLine {
 }
 
 function isPlanted(status: FieldCrop['status']) {
-  return status === 'Planted' || status === 1
+  return status === 'Planted' || status === 2
 }
 
 function toLocalInput(value: string): string {
