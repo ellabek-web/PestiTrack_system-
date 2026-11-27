@@ -131,7 +131,11 @@ public sealed class WorkersController : ControllerBase
             Email = Normalize(request.Email)?.ToLowerInvariant(),
             IsApplicator = request.IsApplicator,
             CertificationNumber = Normalize(request.CertificationNumber),
-            CertificationExpiryDate = request.CertificationExpiryDate,
+            CertificationExpiryDate = request.CertificationExpiryDate.HasValue
+                ? DateTime.SpecifyKind(
+                    request.CertificationExpiryDate.Value,
+                    DateTimeKind.Utc)
+                : null,
             IsActive = true,
             CreatedAtUtc = DateTime.UtcNow
         };
@@ -188,7 +192,11 @@ public sealed class WorkersController : ControllerBase
         worker.Email = Normalize(request.Email)?.ToLowerInvariant();
         worker.IsApplicator = request.IsApplicator;
         worker.CertificationNumber = Normalize(request.CertificationNumber);
-        worker.CertificationExpiryDate = request.CertificationExpiryDate;
+        worker.CertificationExpiryDate = request.CertificationExpiryDate.HasValue
+            ? DateTime.SpecifyKind(
+                request.CertificationExpiryDate.Value,
+                DateTimeKind.Utc)
+            : null;
 
         await _db.SaveChangesAsync(cancellationToken);
 
