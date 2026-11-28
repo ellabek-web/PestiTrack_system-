@@ -46,6 +46,49 @@ export interface Crop {
 
 export type FieldCropStatus = 'Planned' | 'Planted' | 'Harvested' | 'Cancelled'
 
+export type PlotAreaUnit = 'Hectares' | 'SquareMeters' | 'Acres'
+
+export interface Plot {
+  id: string
+  farmId: string
+  fieldId: string
+  fieldName: string
+  plotNumber: string
+  name: string
+  areaValue: number
+  areaUnit: PlotAreaUnit
+  areaHectares: number
+  location: string
+  cropId: string
+  cropName: string
+  comment: string | null
+  isActive: boolean
+  createdAtUtc: string
+}
+
+export const plotAreaUnits: { value: PlotAreaUnit; label: string }[] = [
+  { value: 'Hectares', label: 'Hectares' },
+  { value: 'SquareMeters', label: 'm²' },
+  { value: 'Acres', label: 'Acres' },
+]
+
+export type WeatherCondition =
+  | 'Cloudy'
+  | 'Partly Cloudy'
+  | 'Overcast'
+  | 'Light Wind'
+  | 'Strong Wind'
+  | 'Humid'
+
+export const weatherConditions: WeatherCondition[] = [
+  'Cloudy',
+  'Partly Cloudy',
+  'Overcast',
+  'Light Wind',
+  'Strong Wind',
+  'Humid',
+]
+
 export interface FieldCrop {
   id: string
   farmId: string
@@ -177,6 +220,7 @@ export interface PesticideApplication {
   equipment: string | null
   areaTreatedHectares: number
   weatherRecordId: string | null
+  weatherCondition: string | null
   notes: string | null
   status: 'Draft' | 'Completed'
   createdByUserId: string

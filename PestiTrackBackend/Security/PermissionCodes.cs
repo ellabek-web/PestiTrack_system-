@@ -10,6 +10,10 @@ public static class PermissionCodes
     public const string FieldsView = "fields.view";
     public const string FieldsManage = "fields.manage";
 
+    // Plots
+    public const string PlotsView = "plots.view";
+    public const string PlotsManage = "plots.manage";
+
     // Crops
     public const string CropsView = "crops.view";
     public const string CropsManage = "crops.manage";

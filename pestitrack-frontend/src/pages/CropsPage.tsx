@@ -55,6 +55,7 @@ function statusColor(status: FieldCropStatus): 'default' | 'info' | 'success' | 
 }
 
 interface PlantingPayload {
+  fieldId: string
   cropId: string
   plantingDate: string
   expectedHarvestDate: string | null
@@ -66,6 +67,8 @@ interface PlantingFormProps {
   open: boolean
   planting: FieldCrop | null
   crops: Crop[]
+  fields: Field[]
+  defaultFieldId: string
   saving: boolean
   error: string
   onClose: () => void
@@ -76,11 +79,14 @@ function PlantingForm({
   open,
   planting,
   crops,
+  fields,
+  defaultFieldId,
   saving,
   error,
   onClose,
   onSave,
 }: PlantingFormProps) {
+  const [fieldId, setFieldId] = useState('')
   const [cropId, setCropId] = useState('')
   const [plantingDate, setPlantingDate] = useState('')
   const [expectedHarvestDate, setExpectedHarvestDate] = useState('')
@@ -89,16 +95,18 @@ function PlantingForm({
 
   useEffect(() => {
     if (!open) return
+    setFieldId(planting?.fieldId ?? defaultFieldId)
     setCropId(planting?.cropId ?? crops[0]?.id ?? '')
     setPlantingDate(planting?.plantingDate ?? new Date().toISOString().slice(0, 10))
     setExpectedHarvestDate(planting?.expectedHarvestDate ?? '')
     setActualHarvestDate(planting?.actualHarvestDate ?? '')
     setArea(planting?.areaHectares?.toString() ?? '')
-  }, [open, planting, crops])
+  }, [open, planting, crops, defaultFieldId])
 
   const handleSubmit = (event: FormEvent) => {
     event.preventDefault()
     onSave({
+      fieldId,
       cropId,
       plantingDate,
       expectedHarvestDate: expectedHarvestDate || null,
@@ -114,6 +122,22 @@ function PlantingForm({
         <DialogContent>
           <Stack spacing={2.5} sx={{ pt: 1 }}>
             {error && <Alert severity="error">{error}</Alert>}
+            <FormControl required fullWidth>
+              <InputLabel id="planting-field-label">Field</InputLabel>
+              <Select
+                labelId="planting-field-label"
+                label="Field"
+                value={fieldId}
+                onChange={(event) => setFieldId(event.target.value)}
+                disabled={Boolean(planting)}
+              >
+                {fields.map((field) => (
+                  <MenuItem key={field.id} value={field.id}>
+                    {field.name} ({field.code})
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
             <FormControl required fullWidth>
               <InputLabel id="crop-select-label">Crop</InputLabel>
               <Select
@@ -300,8 +324,8 @@ export function CropsPage() {
     mutationFn: (payload: PlantingPayload) =>
       apiRequest<FieldCrop>(
         editingPlanting
-          ? `/api/farms/${selectedFarmId}/fields/${effectiveFieldId}/crops/${editingPlanting.id}`
-          : `/api/farms/${selectedFarmId}/fields/${effectiveFieldId}/crops`,
+          ? `/api/farms/${selectedFarmId}/fields/${payload.fieldId}/crops/${editingPlanting.id}`
+          : `/api/farms/${selectedFarmId}/fields/${payload.fieldId}/crops`,
         {
           method: editingPlanting ? 'PUT' : 'POST',
           body: JSON.stringify(payload),
@@ -309,7 +333,7 @@ export function CropsPage() {
       ),
     onSuccess: async () => {
       await queryClient.invalidateQueries({
-        queryKey: ['field-crops', selectedFarmId, effectiveFieldId],
+        queryKey: ['field-crops', selectedFarmId],
       })
       setPlantingOpen(false)
       setEditingPlanting(null)
@@ -399,8 +423,8 @@ export function CropsPage() {
           onChange={(_, value: number) => setTab(value)}
           sx={{ px: 2, borderBottom: 1, borderColor: 'divider' }}
         >
-          <Tab label="Field plantings" />
           <Tab label="Crop catalog" />
+          <Tab label="Field plantings" />
         </Tabs>
 
         {pageError && (
@@ -409,7 +433,7 @@ export function CropsPage() {
           </Alert>
         )}
 
-        {tab === 0 && (
+        {tab === 1 && (
           <Box>
             <Stack
               direction={{ xs: 'column', sm: 'row' }}
@@ -436,7 +460,7 @@ export function CropsPage() {
                 variant="contained"
                 startIcon={<AddRoundedIcon />}
                 onClick={openNewPlanting}
-                disabled={!effectiveFieldId || !catalogQuery.data?.length}
+                disabled={!activeFields.length || !catalogQuery.data?.length}
               >
                 Plan crop
               </Button>
@@ -539,7 +563,7 @@ export function CropsPage() {
           </Box>
         )}
 
-        {tab === 1 && (
+        {tab === 0 && (
           <Box>
             {isAdministrator && (
               <Stack direction="row" sx={{ p: 2.5, justifyContent: 'flex-end' }}>
@@ -618,6 +642,8 @@ export function CropsPage() {
         open={plantingOpen}
         planting={editingPlanting}
         crops={catalogQuery.data ?? []}
+        fields={activeFields}
+        defaultFieldId={effectiveFieldId}
         saving={plantingMutation.isPending}
         error={plantingError}
         onClose={() => setPlantingOpen(false)}

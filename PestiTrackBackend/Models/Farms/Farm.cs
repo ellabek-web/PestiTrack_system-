@@ -41,4 +41,7 @@ public sealed class Farm
 
     public ICollection<WeatherRecord> WeatherRecords { get; set; }
         = new List<WeatherRecord>();
+
+    public ICollection<Plot> Plots { get; set; }
+        = new List<Plot>();
 }

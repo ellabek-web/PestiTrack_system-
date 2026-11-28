@@ -43,9 +43,9 @@ import type {
   InventoryBalance,
   PesticideApplication,
   Product,
-  WeatherRecord,
   Worker,
 } from '../types/api'
+import { weatherConditions } from '../types/api'
 
 /* oxlint-disable react/set-state-in-effect -- dialog form resets from the selected application */
 
@@ -66,7 +66,7 @@ interface ApplicationPayload {
   applicationMethod: string
   equipment: string | null
   areaTreatedHectares: number
-  weatherRecordId: string | null
+  weatherCondition: string | null
   notes: string | null
   products: ProductLinePayload[]
 }
@@ -110,7 +110,6 @@ interface ApplicationFormProps {
   workers: Worker[]
   products: Product[]
   balances: InventoryBalance[]
-  weather: WeatherRecord[]
   saving: boolean
   error: string
   onClose: () => void
@@ -125,7 +124,6 @@ function ApplicationForm({
   workers,
   products,
   balances,
-  weather,
   saving,
   error,
   onClose,
@@ -139,7 +137,7 @@ function ApplicationForm({
   const [applicationMethod, setApplicationMethod] = useState('')
   const [equipment, setEquipment] = useState('')
   const [area, setArea] = useState('')
-  const [weatherRecordId, setWeatherRecordId] = useState('')
+  const [weatherCondition, setWeatherCondition] = useState('')
   const [notes, setNotes] = useState('')
   const [productLines, setProductLines] = useState<EditableProductLine[]>([])
 
@@ -176,7 +174,7 @@ function ApplicationForm({
     setApplicationMethod(application?.applicationMethod ?? '')
     setEquipment(application?.equipment ?? '')
     setArea(application?.areaTreatedHectares?.toString() ?? '')
-    setWeatherRecordId(application?.weatherRecordId ?? '')
+    setWeatherCondition(application?.weatherCondition ?? '')
     setNotes(application?.notes ?? '')
     setProductLines(
       application
@@ -222,7 +220,7 @@ function ApplicationForm({
       applicationMethod: applicationMethod.trim(),
       equipment: equipment.trim() || null,
       areaTreatedHectares: Number(area),
-      weatherRecordId: weatherRecordId || null,
+      weatherCondition: weatherCondition || null,
       notes: notes.trim() || null,
       products: productLines.map((line) => ({
         productId: line.productId,
@@ -234,9 +232,6 @@ function ApplicationForm({
     })
   }
 
-  const weatherOptions = weather.filter(
-    (record) => record.fieldId == null || record.fieldId === effectiveFieldId,
-  )
   const applicators = workers.filter((worker) => worker.isActive && worker.isApplicator)
   const productsWithStock = products.filter(
     (product) =>
@@ -271,7 +266,6 @@ function ApplicationForm({
                   onChange={(event) => {
                     setFieldId(event.target.value)
                     setFieldCropId('')
-                    setWeatherRecordId('')
                   }}
                 >
                   {activeFields.map((field) => (
@@ -350,18 +344,17 @@ function ApplicationForm({
                 required
               />
               <FormControl>
-                <InputLabel id="application-weather-label">Weather record</InputLabel>
+                <InputLabel id="application-weather-label">Weather conditions</InputLabel>
                 <Select
                   labelId="application-weather-label"
-                  label="Weather record"
-                  value={weatherRecordId}
-                  onChange={(event) => setWeatherRecordId(event.target.value)}
+                  label="Weather conditions"
+                  value={weatherCondition}
+                  onChange={(event) => setWeatherCondition(event.target.value)}
                 >
                   <MenuItem value="">None</MenuItem>
-                  {weatherOptions.map((record) => (
-                    <MenuItem key={record.id} value={record.id}>
-                      {new Date(record.recordedAtUtc).toLocaleString()} ·{' '}
-                      {record.conditions ?? 'No conditions'}
+                  {weatherConditions.map((condition) => (
+                    <MenuItem key={condition} value={condition}>
+                      {condition}
                     </MenuItem>
                   ))}
                 </Select>
@@ -704,13 +697,6 @@ export function ApplicationsPage() {
     enabled: Boolean(selectedFarmId) && (canCreate || canComplete) && hasPermission('inventory.view'),
     retry: false,
   })
-  const weatherQuery = useQuery({
-    queryKey: ['weather', selectedFarmId, '', '', ''],
-    queryFn: () =>
-      apiRequest<WeatherRecord[]>(`/api/farms/${selectedFarmId}/weather-records`),
-    enabled: Boolean(selectedFarmId) && canCreate && hasPermission('weather.view'),
-    retry: false,
-  })
 
   const saveMutation = useMutation({
     mutationFn: (payload: ApplicationPayload) =>
@@ -774,8 +760,7 @@ export function ApplicationsPage() {
     fieldsQuery.error ??
     workersQuery.error ??
     productsQuery.error ??
-    balancesQuery.error ??
-    weatherQuery.error
+    balancesQuery.error
 
   return (
     <Stack spacing={3}>
@@ -919,7 +904,6 @@ export function ApplicationsPage() {
         workers={workersQuery.data ?? []}
         products={productsQuery.data ?? []}
         balances={balancesQuery.data ?? []}
-        weather={weatherQuery.data ?? []}
         saving={saveMutation.isPending}
         error={formError}
         onClose={() => setFormOpen(false)}

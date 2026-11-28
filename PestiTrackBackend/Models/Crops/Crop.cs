@@ -1,3 +1,5 @@
+using PestiTrackBackend.Models.Farms;
+
 namespace PestiTrackBackend.Models.Crops;
 
 public sealed class Crop
@@ -16,4 +18,7 @@ public sealed class Crop
 
     public ICollection<FieldCrop> FieldAssignments { get; set; }
         = new List<FieldCrop>();
+
+    public ICollection<Plot> Plots { get; set; }
+        = new List<Plot>();
 }

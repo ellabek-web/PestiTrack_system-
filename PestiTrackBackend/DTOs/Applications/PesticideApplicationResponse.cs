@@ -30,6 +30,8 @@ public sealed class PesticideApplicationResponse
 
     public Guid? WeatherRecordId { get; set; }
 
+    public string? WeatherCondition { get; set; }
+
     public string? Notes { get; set; }
 
     public string Status { get; set; } = string.Empty;

@@ -32,6 +32,9 @@ public sealed class CreatePesticideApplicationRequest
 
     public Guid? WeatherRecordId { get; set; }
 
+    [StringLength(50)]
+    public string? WeatherCondition { get; set; }
+
     [StringLength(1000)]
     public string? Notes { get; set; }
 

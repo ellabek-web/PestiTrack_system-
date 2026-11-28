@@ -12,6 +12,9 @@ public static class PermissionSeedData
         new() { Id = Guid.Parse("10000000-0000-0000-0000-000000000003"), Code = PermissionCodes.FieldsView, Name = "View fields", Description = "View field information." },
         new() { Id = Guid.Parse("10000000-0000-0000-0000-000000000004"), Code = PermissionCodes.FieldsManage, Name = "Manage fields", Description = "Create and update fields." },
 
+        new() { Id = Guid.Parse("10000000-0000-0000-0000-000000000026"), Code = PermissionCodes.PlotsView, Name = "View plots", Description = "View plot information." },
+        new() { Id = Guid.Parse("10000000-0000-0000-0000-000000000027"), Code = PermissionCodes.PlotsManage, Name = "Manage plots", Description = "Create and update plots." },
+
         new() { Id = Guid.Parse("10000000-0000-0000-0000-000000000005"), Code = PermissionCodes.CropsView, Name = "View crops", Description = "View crop information." },
         new() { Id = Guid.Parse("10000000-0000-0000-0000-000000000006"), Code = PermissionCodes.CropsManage, Name = "Manage crops", Description = "Create and update crop information." },
 

@@ -25,4 +25,7 @@ public sealed class Field
        = new List<FieldCrop>();
     public ICollection<WeatherRecord> WeatherRecords { get; set; }
       = new List<WeatherRecord>();
+
+    public ICollection<Plot> Plots { get; set; }
+        = new List<Plot>();
 }

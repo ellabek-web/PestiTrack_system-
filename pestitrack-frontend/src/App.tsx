@@ -8,11 +8,12 @@ import { AppShell } from './components/AppShell'
 const DashboardPage = lazy(() => import('./pages/DashboardPage').then((module) => ({ default: module.DashboardPage })))
 const LoginPage = lazy(() => import('./pages/LoginPage').then((module) => ({ default: module.LoginPage })))
 const FieldsPage = lazy(() => import('./pages/FieldsPage').then((module) => ({ default: module.FieldsPage })))
+const PlotsPage = lazy(() => import('./pages/PlotsPage').then((module) => ({ default: module.PlotsPage })))
 const CropsPage = lazy(() => import('./pages/CropsPage').then((module) => ({ default: module.CropsPage })))
 const ProductsPage = lazy(() => import('./pages/ProductsPage').then((module) => ({ default: module.ProductsPage })))
 const InventoryPage = lazy(() => import('./pages/InventoryPage').then((module) => ({ default: module.InventoryPage })))
 const WorkersPage = lazy(() => import('./pages/WorkersPage').then((module) => ({ default: module.WorkersPage })))
-const WeatherPage = lazy(() => import('./pages/WeatherPage').then((module) => ({ default: module.WeatherPage })))
+
 const ApplicationsPage = lazy(() => import('./pages/ApplicationsPage').then((module) => ({ default: module.ApplicationsPage })))
 const AdministrationPage = lazy(() => import('./pages/AdministrationPage').then((module) => ({ default: module.AdministrationPage })))
 const ApplicationHistoryPage = lazy(() => import('./pages/ApplicationHistoryPage').then((module) => ({ default: module.ApplicationHistoryPage })))
@@ -69,10 +70,10 @@ export default function App() {
           <Route element={<ProtectedApp />}>
             <Route index element={<DashboardPage />} />
             <Route path="fields" element={<FieldsPage />} />
+            <Route path="plots" element={<PlotsPage />} />
             <Route path="crops" element={<CropsPage />} />
             <Route path="products" element={<ProductsPage />} />
             <Route path="workers" element={<WorkersPage />} />
-            <Route path="weather" element={<WeatherPage />} />
             <Route path="inventory" element={<InventoryPage />} />
             <Route path="applications" element={<ApplicationsPage />} />
             <Route path="application-history" element={<ApplicationHistoryPage />} />

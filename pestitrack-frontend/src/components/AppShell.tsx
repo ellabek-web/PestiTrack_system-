@@ -26,13 +26,13 @@ import AgricultureRoundedIcon from '@mui/icons-material/AgricultureRounded'
 import AppsRoundedIcon from '@mui/icons-material/AppsRounded'
 import DashboardRoundedIcon from '@mui/icons-material/DashboardRounded'
 import GrassRoundedIcon from '@mui/icons-material/GrassRounded'
+import GridViewRoundedIcon from '@mui/icons-material/GridViewRounded'
 import Inventory2RoundedIcon from '@mui/icons-material/Inventory2Rounded'
 import LogoutRoundedIcon from '@mui/icons-material/LogoutRounded'
 import MenuRoundedIcon from '@mui/icons-material/MenuRounded'
 import PeopleRoundedIcon from '@mui/icons-material/PeopleRounded'
 import ScienceRoundedIcon from '@mui/icons-material/ScienceRounded'
 import SpaRoundedIcon from '@mui/icons-material/SpaRounded'
-import WaterDropRoundedIcon from '@mui/icons-material/WaterDropRounded'
 import AdminPanelSettingsRoundedIcon from '@mui/icons-material/AdminPanelSettingsRounded'
 import AssessmentRoundedIcon from '@mui/icons-material/AssessmentRounded'
 import NotificationsRoundedIcon from '@mui/icons-material/NotificationsRounded'
@@ -60,10 +60,10 @@ interface NavItem {
 const navigation: NavItem[] = [
   { label: 'Overview', path: '/', icon: <DashboardRoundedIcon /> },
   { label: 'Fields', path: '/fields', icon: <GrassRoundedIcon />, permission: 'fields.view' },
+  { label: 'Plots', path: '/plots', icon: <GridViewRoundedIcon />, permission: 'plots.view' },
   { label: 'Crops', path: '/crops', icon: <SpaRoundedIcon />, permission: 'crops.view' },
   { label: 'Products', path: '/products', icon: <ScienceRoundedIcon /> },
   { label: 'Workers', path: '/workers', icon: <PeopleRoundedIcon />, permission: 'workers.view' },
-  { label: 'Weather', path: '/weather', icon: <WaterDropRoundedIcon />, permission: 'weather.view' },
   { label: 'Inventory', path: '/inventory', icon: <Inventory2RoundedIcon />, permission: 'inventory.view' },
   { label: 'Applications', path: '/applications', icon: <AppsRoundedIcon />, permission: 'applications.view' },
   { label: 'Application history', path: '/application-history', icon: <HistoryRoundedIcon />, permission: 'applications.view' },

@@ -46,6 +46,8 @@ public class AppDbContext
     public DbSet<FarmUser> FarmUsers => Set<FarmUser>();
     public DbSet<Field> Fields => Set<Field>();
 
+    public DbSet<Plot> Plots => Set<Plot>();
+
     // Farm-level authorization
     public DbSet<FarmRole> FarmRoles => Set<FarmRole>();
     public DbSet<FarmUserRole> FarmUserRoles => Set<FarmUserRole>();
@@ -135,6 +137,7 @@ public class AppDbContext
 
         ConfigureFarm(builder);
         ConfigureField(builder);
+        ConfigurePlot(builder);
         ConfigureCrop(builder);
         ConfigureFieldCrop(builder);
         ConfigureFarmUser(builder);
@@ -447,6 +450,77 @@ public class AppDbContext
         });
     }
 
+
+    private static void ConfigurePlot(ModelBuilder builder)
+    {
+        builder.Entity<Plot>(entity =>
+        {
+            entity.ToTable("Plots");
+
+            entity.HasKey(plot => plot.Id);
+
+            entity.Property(plot => plot.PlotNumber)
+                .HasMaxLength(50)
+                .IsRequired();
+
+            entity.Property(plot => plot.Name)
+                .HasMaxLength(150)
+                .IsRequired();
+
+            entity.Property(plot => plot.AreaValue)
+                .HasPrecision(18, 3)
+                .IsRequired();
+
+            entity.Property(plot => plot.AreaUnit)
+                .HasMaxLength(20)
+                .IsRequired();
+
+            entity.Property(plot => plot.Location)
+                .HasMaxLength(300)
+                .IsRequired();
+
+            entity.Property(plot => plot.Comment)
+                .HasMaxLength(1000);
+
+            // A plot number must be unique within its field.
+            entity.HasIndex(plot => new
+            {
+                plot.FarmId,
+                plot.FieldId,
+                plot.PlotNumber
+            }).IsUnique();
+
+            entity.HasIndex(plot => new
+            {
+                plot.FarmId,
+                plot.FieldId
+            });
+
+            entity.HasOne(plot => plot.Farm)
+                .WithMany(farm => farm.Plots)
+                .HasForeignKey(plot => plot.FarmId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(plot => plot.Field)
+                .WithMany(field => field.Plots)
+                .HasForeignKey(plot => new
+                {
+                    plot.FieldId,
+                    plot.FarmId
+                })
+                .HasPrincipalKey(field => new
+                {
+                    field.Id,
+                    field.FarmId
+                })
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(plot => plot.Crop)
+                .WithMany(crop => crop.Plots)
+                .HasForeignKey(plot => plot.CropId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+    }
 
         private static void ConfigureCrop(ModelBuilder builder)
     {
@@ -806,6 +880,9 @@ public class AppDbContext
             .HasConversion<string>()
             .HasMaxLength(30)
             .IsRequired();
+
+        entity.Property(application => application.WeatherCondition)
+            .HasMaxLength(50);
 
         entity.Property(application => application.Notes)
             .HasMaxLength(1000);

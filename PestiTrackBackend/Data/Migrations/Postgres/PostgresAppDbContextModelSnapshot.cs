@@ -196,6 +196,10 @@ namespace PestiTrackBackend.Data.Migrations.Postgres
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
 
+                    b.Property<string>("WeatherCondition")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
                     b.Property<Guid?>("WeatherRecordId")
                         .HasColumnType("uuid");
 
@@ -439,6 +443,20 @@ namespace PestiTrackBackend.Data.Migrations.Postgres
                             Code = "fields.manage",
                             Description = "Create and update fields.",
                             Name = "Manage fields"
+                        },
+                        new
+                        {
+                            Id = new Guid("10000000-0000-0000-0000-000000000026"),
+                            Code = "plots.view",
+                            Description = "View plot information.",
+                            Name = "View plots"
+                        },
+                        new
+                        {
+                            Id = new Guid("10000000-0000-0000-0000-000000000027"),
+                            Code = "plots.manage",
+                            Description = "Create and update plots.",
+                            Name = "Manage plots"
                         },
                         new
                         {
@@ -890,6 +908,69 @@ namespace PestiTrackBackend.Data.Migrations.Postgres
                         .IsUnique();
 
                     b.ToTable("Fields", (string)null);
+                });
+
+            modelBuilder.Entity("PestiTrackBackend.Models.Farms.Plot", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AreaUnit")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<decimal>("AreaValue")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("numeric(18,3)");
+
+                    b.Property<string>("Comment")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("CropId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("FarmId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("FieldId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Location")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<string>("PlotNumber")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CropId");
+
+                    b.HasIndex("FarmId", "FieldId");
+
+                    b.HasIndex("FieldId", "FarmId");
+
+                    b.HasIndex("FarmId", "FieldId", "PlotNumber")
+                        .IsUnique();
+
+                    b.ToTable("Plots", (string)null);
                 });
 
             modelBuilder.Entity("PestiTrackBackend.Models.Identity.ApplicationRole", b =>
@@ -1661,6 +1742,34 @@ namespace PestiTrackBackend.Data.Migrations.Postgres
                     b.Navigation("Farm");
                 });
 
+            modelBuilder.Entity("PestiTrackBackend.Models.Farms.Plot", b =>
+                {
+                    b.HasOne("PestiTrackBackend.Models.Crops.Crop", "Crop")
+                        .WithMany("Plots")
+                        .HasForeignKey("CropId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("PestiTrackBackend.Models.Farms.Farm", "Farm")
+                        .WithMany("Plots")
+                        .HasForeignKey("FarmId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("PestiTrackBackend.Models.Farms.Field", "Field")
+                        .WithMany("Plots")
+                        .HasForeignKey("FieldId", "FarmId")
+                        .HasPrincipalKey("Id", "FarmId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Crop");
+
+                    b.Navigation("Farm");
+
+                    b.Navigation("Field");
+                });
+
             modelBuilder.Entity("PestiTrackBackend.Models.Inventory.InventoryThreshold", b =>
                 {
                     b.HasOne("PestiTrackBackend.Models.Farms.Farm", "Farm")
@@ -1778,6 +1887,8 @@ namespace PestiTrackBackend.Data.Migrations.Postgres
             modelBuilder.Entity("PestiTrackBackend.Models.Crops.Crop", b =>
                 {
                     b.Navigation("FieldAssignments");
+
+                    b.Navigation("Plots");
                 });
 
             modelBuilder.Entity("PestiTrackBackend.Models.Farms.Farm", b =>
@@ -1785,6 +1896,8 @@ namespace PestiTrackBackend.Data.Migrations.Postgres
                     b.Navigation("FieldCrops");
 
                     b.Navigation("Fields");
+
+                    b.Navigation("Plots");
 
                     b.Navigation("Roles");
 
@@ -1803,6 +1916,8 @@ namespace PestiTrackBackend.Data.Migrations.Postgres
             modelBuilder.Entity("PestiTrackBackend.Models.Farms.Field", b =>
                 {
                     b.Navigation("CropAssignments");
+
+                    b.Navigation("Plots");
 
                     b.Navigation("WeatherRecords");
                 });

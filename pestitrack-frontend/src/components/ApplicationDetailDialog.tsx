@@ -110,6 +110,12 @@ export function ApplicationDetailDialog({
               </Box>
             )}
 
+            {detailQuery.data.weatherCondition && (
+              <Alert severity="info">
+                Weather conditions: {detailQuery.data.weatherCondition}
+              </Alert>
+            )}
+
             {detailQuery.data.weather && (
               <Alert severity="info">
                 Weather ({new Date(detailQuery.data.weather.recordedAtUtc).toLocaleString()}):{' '}

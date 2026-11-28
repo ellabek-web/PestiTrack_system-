@@ -526,6 +526,7 @@ public sealed class PesticideApplicationsController : ControllerBase
             request.ApplicationDateUtc,
             request.AreaTreatedHectares,
             request.WeatherRecordId,
+            request.WeatherCondition,
             request.Products,
             cancellationToken);
 
@@ -550,6 +551,7 @@ public sealed class PesticideApplicationsController : ControllerBase
             Equipment = Normalize(request.Equipment),
             AreaTreatedHectares = request.AreaTreatedHectares,
             WeatherRecordId = request.WeatherRecordId,
+            WeatherCondition = Normalize(request.WeatherCondition),
             Notes = Normalize(request.Notes),
             Status = PesticideApplicationStatus.Draft,
             CreatedByUserId = userId,
@@ -656,6 +658,7 @@ public sealed class PesticideApplicationsController : ControllerBase
             request.ApplicationDateUtc,
             request.AreaTreatedHectares,
             request.WeatherRecordId,
+            request.WeatherCondition,
             request.Products,
             cancellationToken);
 
@@ -677,6 +680,7 @@ public sealed class PesticideApplicationsController : ControllerBase
         application.Equipment = Normalize(request.Equipment);
         application.AreaTreatedHectares = request.AreaTreatedHectares;
         application.WeatherRecordId = request.WeatherRecordId;
+        application.WeatherCondition = Normalize(request.WeatherCondition);
         application.Notes = Normalize(request.Notes);
 
         // Delete existing draft product lines directly in the database.
@@ -825,6 +829,7 @@ public sealed class PesticideApplicationsController : ControllerBase
             application.ApplicationDateUtc,
             application.AreaTreatedHectares,
             application.WeatherRecordId,
+            application.WeatherCondition,
             application.Products.Select(p => new ApplicationProductRequest
             {
                 ProductId = p.ProductId,
@@ -974,6 +979,7 @@ public sealed class PesticideApplicationsController : ControllerBase
         DateTime applicationDateUtc,
         decimal areaTreatedHectares,
         Guid? weatherRecordId,
+        string? weatherCondition,
         List<ApplicationProductRequest>? products,
         CancellationToken cancellationToken)
     {
@@ -1099,6 +1105,13 @@ public sealed class PesticideApplicationsController : ControllerBase
             }
         }
 
+        // 5b. Validate the recorded weather condition, when one is given.
+        if (weatherCondition is not null &&
+            !WeatherConditions.IsValid(weatherCondition))
+        {{
+            return "The selected weather condition is not valid.";
+        }}
+
         // 6. Validate product lines and authoritative label safety restrictions.
         var productIds = products
             .Select(p => p.ProductId)
@@ -1197,6 +1210,7 @@ public sealed class PesticideApplicationsController : ControllerBase
             Equipment = application.Equipment,
             AreaTreatedHectares = application.AreaTreatedHectares,
             WeatherRecordId = application.WeatherRecordId,
+            WeatherCondition = application.WeatherCondition,
             Notes = application.Notes,
             Status = application.Status.ToString(),
             CreatedByUserId = application.CreatedByUserId,
